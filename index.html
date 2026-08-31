@@ -126,7 +126,6 @@ button{cursor:pointer}
 .theme-card span{display:block;font-size:10px;font-weight:600;padding:4px 6px}
 .trans-card{width:64px;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--paper-2);flex:none;font-size:10.5px;font-weight:600;color:var(--muted)}
 .trans-card.active{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
-.trans-card:disabled{opacity:.4;cursor:default}
 
 /* Workspace */
 .workspace{flex:1;min-height:0;display:grid;grid-template-columns:210px 1fr 280px}
@@ -170,7 +169,6 @@ button{cursor:pointer}
 .guide{position:absolute;background:var(--gold);z-index:5;pointer-events:none}
 .guide.v{width:1px;top:0;bottom:0}
 .guide.h{height:1px;left:0;right:0}
-.anim-badge{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:4px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:4;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 
 .notes-panel{flex:none;border-top:1px solid var(--line-2);background:#fff;display:none;flex-direction:column;height:110px}
 .notes-panel.open{display:flex}
@@ -262,26 +260,6 @@ details.acc[open] summary::after{transform:rotate(180deg)}
 .presenter-notes{position:absolute;left:16px;bottom:76px;max-width:420px;background:#111827e6;color:#fff;padding:12px 14px;border-radius:9px;font-size:13px;line-height:1.5;display:none}
 .presenter-notes.show{display:block}
 
-/* Element entrance animations — used in Presenter mode and for in-canvas preview */
-@keyframes pkfFadeIn{from{opacity:0}to{opacity:var(--endOp,1)}}
-@keyframes pkfFlyInLeft{from{opacity:0;transform:translateX(-60px)}to{opacity:var(--endOp,1);transform:translateX(0)}}
-@keyframes pkfFlyInRight{from{opacity:0;transform:translateX(60px)}to{opacity:var(--endOp,1);transform:translateX(0)}}
-@keyframes pkfFlyInUp{from{opacity:0;transform:translateY(60px)}to{opacity:var(--endOp,1);transform:translateY(0)}}
-@keyframes pkfFlyInDown{from{opacity:0;transform:translateY(-60px)}to{opacity:var(--endOp,1);transform:translateY(0)}}
-@keyframes pkfZoomIn{from{opacity:0;transform:scale(.5)}to{opacity:var(--endOp,1);transform:scale(1)}}
-@keyframes pkfBounceIn{0%{opacity:0;transform:scale(.3)}50%{opacity:var(--endOp,1);transform:scale(1.08)}70%{transform:scale(.95)}100%{opacity:var(--endOp,1);transform:scale(1)}}
-@keyframes pkfSpin{from{opacity:0;transform:rotate(-200deg) scale(.4)}to{opacity:var(--endOp,1);transform:rotate(0) scale(1)}}
-@keyframes pkfPulse{0%{opacity:0;transform:scale(1)}50%{opacity:var(--endOp,1);transform:scale(1.15)}100%{opacity:var(--endOp,1);transform:scale(1)}}
-.pa-fadeIn{animation-name:pkfFadeIn;animation-fill-mode:forwards;animation-timing-function:ease-out}
-.pa-flyInLeft{animation-name:pkfFlyInLeft;animation-fill-mode:forwards;animation-timing-function:cubic-bezier(.2,.8,.3,1)}
-.pa-flyInRight{animation-name:pkfFlyInRight;animation-fill-mode:forwards;animation-timing-function:cubic-bezier(.2,.8,.3,1)}
-.pa-flyInUp{animation-name:pkfFlyInUp;animation-fill-mode:forwards;animation-timing-function:cubic-bezier(.2,.8,.3,1)}
-.pa-flyInDown{animation-name:pkfFlyInDown;animation-fill-mode:forwards;animation-timing-function:cubic-bezier(.2,.8,.3,1)}
-.pa-zoomIn{animation-name:pkfZoomIn;animation-fill-mode:forwards;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}
-.pa-bounceIn{animation-name:pkfBounceIn;animation-fill-mode:forwards;animation-timing-function:ease-out}
-.pa-spin{animation-name:pkfSpin;animation-fill-mode:forwards;animation-timing-function:ease-out}
-.pa-pulse{animation-name:pkfPulse;animation-fill-mode:forwards;animation-timing-function:ease-out}
-
 @media(max-width:980px){.workspace{grid-template-columns:150px 1fr}.inspector{display:none}.tpl-strip{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:640px){.workspace{grid-template-columns:96px 1fr}.rgroup{padding:2px 8px}.deck-grid{grid-template-columns:repeat(2,1fr)}.tpl-strip{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -332,7 +310,6 @@ details.acc[open] summary::after{transform:rotate(180deg)}
       <button class="rtab" data-tab="insert" onclick="switchRibbon('insert')">Insert</button>
       <button class="rtab" data-tab="design" onclick="switchRibbon('design')">Design</button>
       <button class="rtab" data-tab="transitions" onclick="switchRibbon('transitions')">Transitions</button>
-      <button class="rtab" data-tab="animations" onclick="switchRibbon('animations')">Animations</button>
       <button class="rtab" data-tab="view" onclick="switchRibbon('view')">View</button>
     </div>
 
@@ -465,29 +442,6 @@ details.acc[open] summary::after{transform:rotate(180deg)}
       <div class="rgroup" style="border-right:none">
         <div class="rgroup-row" id="transStrip"></div>
         <div class="rgroup-label">Applies to current slide</div>
-      </div>
-    </div>
-
-    <!-- ANIMATIONS -->
-    <div class="ribbon-panel" data-panel="animations">
-      <div class="rgroup">
-        <div class="rgroup-row" id="animGrid" style="flex-wrap:wrap;max-width:600px"></div>
-        <div class="rgroup-label">Entrance animation — applies to selected element</div>
-      </div>
-      <div class="rgroup" style="border-right:none">
-        <div class="rgroup-row">
-          <select id="animTrigger" class="rselect" onchange="setAnimTrigger(this.value)">
-            <option value="onClick">Start: On Click</option>
-            <option value="withPrevious">Start: With Previous</option>
-            <option value="afterPrevious">Start: After Previous</option>
-          </select>
-        </div>
-        <div class="rgroup-row">
-          <div class="field" style="width:76px"><label>Duration (s)</label><input id="animDuration" type="number" min="0.1" max="5" step="0.1" onchange="setAnimDuration(+this.value)"></div>
-          <div class="field" style="width:76px"><label>Delay (s)</label><input id="animDelay" type="number" min="0" max="5" step="0.1" onchange="setAnimDelay(+this.value)"></div>
-          <button class="rbtn" title="Preview animation" onclick="previewAnim()">▶</button>
-        </div>
-        <div class="rgroup-label">Timing — plays back in Present mode</div>
       </div>
     </div>
 
@@ -663,25 +617,22 @@ let deck=null;                // currently open deck (full)
 let current=0, selected=null, editingId=null, zoomLevel=1, showGrid=false, showGuides=true, notesOpen=false;
 let undoStack=[], redoStack=[], clipboard=null;
 let drag=null, resize=null, presentIndex=0, presenterNotesOn=false;
-let presentGroups=[], presentStep=-1, presentTimers=[];
 let saveTimer=null, activeRibbon='home', activeInsp='format';
-let animNumberMap={};
 
 /* =================== SLIDE / ELEMENT FACTORIES =================== */
-function defaultAnim(){return {type:"none",trigger:"onClick",duration:0.6,delay:0}}
 function textEl(text,x,y,w,h,fontSize=28,extra={}){
-  return Object.assign({id:uid(),type:"text",text,x,y,w,h,fontFamily:"Inter",fontSize,color:"#14181F",bold:false,italic:false,underline:false,bullet:false,align:"left",opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()},extra)
+  return Object.assign({id:uid(),type:"text",text,x,y,w,h,fontFamily:"Inter",fontSize,color:"#14181F",bold:false,italic:false,underline:false,bullet:false,align:"left",opacity:1,rotation:0,locked:false,hidden:false},extra)
 }
 function shapeEl(type,x=20,y=25,w=30,h=25,fill){
-  return {id:uid(),type:"shape",shape:type,x,y,w,h,fill:fill||"#4F46E5",stroke:"#3730A3",strokeWidth:2,opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()}
+  return {id:uid(),type:"shape",shape:type,x,y,w,h,fill:fill||"#4F46E5",stroke:"#3730A3",strokeWidth:2,opacity:1,rotation:0,locked:false,hidden:false}
 }
 function iconEl(name,x,y,w,h,color){
-  return {id:uid(),type:"icon",iconName:name,x,y,w,h,color:color||"#12141C",opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()}
+  return {id:uid(),type:"icon",iconName:name,x,y,w,h,color:color||"#12141C",opacity:1,rotation:0,locked:false,hidden:false}
 }
 function chartEl(x,y,w,h,chartType,data){
   return {id:uid(),type:"chart",chartType:chartType||"bar",
     data:data||[{label:"Q1",value:10},{label:"Q2",value:25},{label:"Q3",value:15},{label:"Q4",value:30}],
-    x,y,w,h,opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()}
+    x,y,w,h,opacity:1,rotation:0,locked:false,hidden:false}
 }
 const CHART_PALETTE=["#4F46E5","#F59E0B","#10B981","#EF4444","#0EA5E9","#8B5CF6","#EC4899","#84CC16"];
 /* stroke-only 24x24 icon paths — inner markup only, wrapped with an <svg> at render time */
@@ -858,7 +809,7 @@ async function openDeck(id){
     deck=r?JSON.parse(r.value):newDeckObj();
   }catch(e){toast("Could not open presentation");return}
   deck.slides.forEach(s=>{if(s.notes===undefined)s.notes="";if(s.transition===undefined)s.transition="fade";
-    s.elements.forEach(el=>{if(el.locked===undefined)el.locked=false;if(el.hidden===undefined)el.hidden=false;if(!el.anim)el.anim=defaultAnim();})});
+    s.elements.forEach(el=>{if(el.locked===undefined)el.locked=false;if(el.hidden===undefined)el.hidden=false;})});
   current=0;selected=null;undoStack=[];redoStack=[];zoomLevel=1;notesOpen=false;
   showEditor();render();
 }
@@ -1073,7 +1024,7 @@ function render(){
   $("notesToggle").classList.toggle("active",notesOpen);
   $("gridToggle").classList.toggle("active",showGrid);
   $("guideToggle").classList.toggle("active",showGuides);
-  buildThemeStrip();buildTransStrip();buildAnimPanel();
+  buildThemeStrip();buildTransStrip();
 }
 function renderThumbs(){
   const box=$("thumbs");box.innerHTML="";
@@ -1092,7 +1043,6 @@ function renderThumbs(){
 function renderCanvas(){
   const c=$("canvas");c.innerHTML="";const s=deck.slides[current];c.style.background=s.bg;
   if(showGrid)c.style.backgroundImage="linear-gradient(#94a3b833 1px,transparent 1px),linear-gradient(90deg,#94a3b833 1px,transparent 1px)",c.style.backgroundSize="5% 5%";else c.style.backgroundImage="none";
-  animNumberMap=computeAnimNumbers(s);
   s.elements.forEach(e=>renderElement(c,e));
   ["gx","gy"].forEach(id=>{});
 }
@@ -1140,10 +1090,6 @@ function renderElement(c,e){
   if(selected===e.id&&!isEditing){
     d.classList.add("selected");
     if(!e.locked)["nw","ne","sw","se"].forEach(pos=>{let h=document.createElement("i");h.className=`handle h-${pos}`;h.onmousedown=ev=>startResize(ev,e,pos);d.append(h)});
-  }
-  if(animNumberMap[e.id]){
-    const badge=document.createElement("span");badge.className="anim-badge";badge.textContent=animNumberMap[e.id];
-    d.append(badge);
   }
   c.append(d);
 }
@@ -1316,7 +1262,7 @@ function chooseChart(type){
 
 $("imagePicker").onchange=ev=>{
   let f=ev.target.files[0];if(!f)return;let reader=new FileReader();
-  reader.onload=()=>{snapshot();let e={id:uid(),type:"image",src:reader.result,x:20,y:20,w:55,h:45,opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()};deck.slides[current].elements.push(e);selected=e.id;render();scheduleSave()};
+  reader.onload=()=>{snapshot();let e={id:uid(),type:"image",src:reader.result,x:20,y:20,w:55,h:45,opacity:1,rotation:0,locked:false,hidden:false};deck.slides[current].elements.push(e);selected=e.id;render();scheduleSave()};
   reader.readAsDataURL(f);ev.target.value="";
 }
 function selectedEl(){return deck.slides[current].elements.find(e=>e.id===selected)}
@@ -1353,66 +1299,6 @@ function applyThemeToDeck(themeId){
     });
   });
   render();scheduleSave();toast("Theme applied: "+t.name);
-}
-
-/* =================== ANIMATIONS =================== */
-const ANIM_DEFS=[["none","None"],["fadeIn","Fade In"],["flyInLeft","Fly In L"],["flyInRight","Fly In R"],["flyInUp","Fly In Up"],["flyInDown","Fly In Dn"],["zoomIn","Zoom In"],["bounceIn","Bounce"],["spin","Spin"],["pulse","Pulse"]];
-const ANIM_CLASS={fadeIn:'pa-fadeIn',flyInLeft:'pa-flyInLeft',flyInRight:'pa-flyInRight',flyInUp:'pa-flyInUp',flyInDown:'pa-flyInDown',zoomIn:'pa-zoomIn',bounceIn:'pa-bounceIn',spin:'pa-spin',pulse:'pa-pulse'};
-function ensureAnim(e){if(!e.anim)e.anim=defaultAnim();return e.anim}
-function buildAnimPanel(){
-  if(!$("animGrid"))return;
-  const e=selectedEl();
-  const cur=e&&e.anim?e.anim.type:'none';
-  $("animGrid").innerHTML=ANIM_DEFS.map(([k,label])=>`<button class="trans-card ${cur===k?'active':''}" ${e?'':'disabled'} onclick="setAnimType('${k}')">${label}</button>`).join("");
-  const hasAnim=!!(e&&e.anim&&e.anim.type!=='none');
-  $("animTrigger").value = e&&e.anim?e.anim.trigger:'onClick';
-  $("animTrigger").disabled=!hasAnim;
-  $("animDuration").value = e&&e.anim?e.anim.duration:0.6;
-  $("animDuration").disabled=!hasAnim;
-  $("animDelay").value = e&&e.anim?e.anim.delay:0;
-  $("animDelay").disabled=!hasAnim;
-}
-function setAnimType(type){
-  const e=selectedEl();if(!e)return toast("Select an element first");
-  snapshot();ensureAnim(e).type=type;render();scheduleSave();
-  if(type!=='none')toast("Animation set: "+(ANIM_DEFS.find(a=>a[0]===type)||[,type])[1]);
-}
-function setAnimTrigger(v){const e=selectedEl();if(!e)return;snapshot();ensureAnim(e).trigger=v;render();scheduleSave()}
-function setAnimDuration(v){const e=selectedEl();if(!e)return;snapshot();ensureAnim(e).duration=Math.max(0.1,v||0.6);render();scheduleSave()}
-function setAnimDelay(v){const e=selectedEl();if(!e)return;snapshot();ensureAnim(e).delay=Math.max(0,v||0);render();scheduleSave()}
-function previewAnim(){
-  const e=selectedEl();if(!e||!e.anim||e.anim.type==='none')return toast("Choose an animation first");
-  const node=$("canvas").querySelector('.element[data-id="'+e.id+'"]');
-  if(!node)return;
-  const cls=ANIM_CLASS[e.anim.type];if(!cls)return;
-  node.classList.remove(...Object.values(ANIM_CLASS));
-  void node.offsetWidth;
-  node.style.setProperty('--endOp',e.opacity??1);
-  node.style.animationDuration=(e.anim.duration||0.6)+'s';
-  node.style.animationDelay='0s';
-  node.classList.add(cls);
-  setTimeout(()=>node.classList.remove(cls),((e.anim.duration||0.6)*1000)+80);
-}
-function computeAnimNumbers(slide){
-  const map={};let groupIndex=-1;
-  slide.elements.forEach(el=>{
-    if(!el.anim||el.anim.type==='none')return;
-    if(el.anim.trigger==='withPrevious'&&groupIndex>=0){map[el.id]=groupIndex+1}
-    else{groupIndex++;map[el.id]=groupIndex+1}
-  });
-  return map;
-}
-function computeAnimGroups(slide){
-  const groups=[];
-  slide.elements.forEach(el=>{
-    if(!el.anim||el.anim.type==='none')return;
-    if(el.anim.trigger==='withPrevious'&&groups.length>0){
-      groups[groups.length-1].elements.push(el);
-    }else{
-      groups.push({auto:el.anim.trigger!=='onClick',elements:[el]});
-    }
-  });
-  return groups;
 }
 
 /* =================== PANELS =================== */
@@ -1482,8 +1368,6 @@ function updateFormatPanel(){
     </select></div>
     <div class="field"><label>Data (label,value per line)</label><textarea oninput="setChartData(this.value)" style="min-height:110px">${esc((e.data||[]).map(d=>d.label+","+d.value).join("\n"))}</textarea></div>
   </div></details>`;
-  const animInfo=e.anim&&e.anim.type!=='none'?`${(ANIM_DEFS.find(a=>a[0]===e.anim.type)||[,e.anim.type])[1]} · ${e.anim.trigger}`:'None';
-  html+=`<details class="acc"><summary>Animation</summary><div class="acc-body" style="font-size:12px;color:var(--muted)">${animInfo}<br><span style="font-size:11px">Set on the Animations tab in the ribbon.</span></div></details>`;
   html+=`<details class="acc"><summary>Arrange</summary><div class="acc-body">
     <div class="checks"><button class="check" onclick="bringToFront()">Front</button><button class="check" onclick="sendToBack()">Back</button></div>
     <div class="checks" style="margin-top:6px"><button class="check ${e.locked?'active':''}" onclick="toggleFlag('locked')">${e.locked?'Locked':'Lock'}</button><button class="check ${e.hidden?'active':''}" onclick="toggleFlag('hidden')">${e.hidden?'Hidden':'Hide'}</button></div>
@@ -1591,70 +1475,32 @@ async function exportPPTX(){
 
 /* =================== PRESENTER MODE =================== */
 function startPresentation(){presentIndex=current;presenterNotesOn=false;showPresent();try{document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()}catch(e){}}
-function clearPresentTimers(){presentTimers.forEach(t=>clearTimeout(t));presentTimers=[]}
 function showPresent(){
-  clearPresentTimers();
   const s=deck.slides[presentIndex],p=$("presentSlide");
   p.className="pslide t-"+(s.transition&&s.transition!=='none'?s.transition:'fade');
   p.innerHTML="";p.style.background=s.bg;
   s.elements.forEach(e=>{if(!e.hidden)presentElement(p,e)});
-  presentGroups=computeAnimGroups(s);
-  presentStep=-1;
   $("presentInfo").textContent=`${presentIndex+1} / ${deck.slides.length}`;
   $("presenterNotes").textContent=s.notes||"No notes for this slide.";
   $("presenterNotes").classList.toggle("show",presenterNotesOn);
   $("present").classList.add("show");
-  if(presentGroups[0]&&presentGroups[0].auto)playGroupsFrom(0);
 }
 function presentElement(p,e){
-  const wrap=document.createElement("div");
-  wrap.dataset.id=e.id;
-  Object.assign(wrap.style,{position:"absolute",left:e.x+"%",top:e.y+"%",width:e.w+"%",height:e.h+"%",transform:`rotate(${e.rotation||0}deg)`});
   let d=document.createElement(e.type==="image"?"img":"div");
   if(e.type==="text")d.innerText=e.text;
   if(e.type==="image")d.src=e.src;
-  Object.assign(d.style,{position:"absolute",inset:"0",opacity:e.opacity??1,overflow:"hidden"});
+  Object.assign(d.style,{position:"absolute",left:e.x+"%",top:e.y+"%",width:e.w+"%",height:e.h+"%",opacity:e.opacity??1,transform:`rotate(${e.rotation||0}deg)`,overflow:"hidden"});
   if(e.type==="text")Object.assign(d.style,{fontFamily:e.fontFamily,fontSize:e.fontSize+"px",fontWeight:e.bold?"700":"400",fontStyle:e.italic?"italic":"normal",textDecoration:e.underline?"underline":"none",color:e.color,textAlign:e.align,whiteSpace:"pre-wrap",padding:"4px",lineHeight:"1.25"});
   if(e.type==="image")d.style.objectFit="contain";
   if(e.type==="shape")styleShapeDiv(d,e);
   if(e.type==="icon")d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`;
   if(e.type==="chart")d.innerHTML=renderChartSVG(e);
-  if(e.anim&&e.anim.type&&e.anim.type!=='none'&&ANIM_CLASS[e.anim.type]){
-    d.style.setProperty('--endOp',e.opacity??1);
-    d.style.opacity=0;
-    d.style.animationDuration=(e.anim.duration||0.6)+"s";
-    d.style.animationDelay=(e.anim.delay||0)+"s";
-  }
-  wrap.append(d);
-  p.append(wrap);
+  p.append(d);
 }
-function playGroup(group){
-  group.elements.forEach(el=>{
-    const wrap=$("presentSlide").querySelector('[data-id="'+el.id+'"]');
-    if(!wrap)return;
-    const d=wrap.firstElementChild;if(!d)return;
-    const cls=ANIM_CLASS[el.anim.type];if(!cls)return;
-    d.classList.add(cls);
-  });
-}
-function playGroupsFrom(idx){
-  if(idx<0||idx>=presentGroups.length)return;
-  playGroup(presentGroups[idx]);
-  presentStep=idx;
-  const next=idx+1;
-  if(presentGroups[next]&&presentGroups[next].auto){
-    const g=presentGroups[idx],el0=g.elements[0],dur=((el0.anim.duration||0.6)+(el0.anim.delay||0));
-    const t=setTimeout(()=>playGroupsFrom(next),dur*1000+60);
-    presentTimers.push(t);
-  }
-}
-function nextPresent(){
-  if(presentStep+1<presentGroups.length){playGroupsFrom(presentStep+1);return}
-  if(presentIndex<deck.slides.length-1){presentIndex++;showPresent()}
-}
+function nextPresent(){if(presentIndex<deck.slides.length-1){presentIndex++;showPresent()}}
 function prevPresent(){if(presentIndex>0){presentIndex--;showPresent()}}
 function togglePresenterNotes(){presenterNotesOn=!presenterNotesOn;$("presenterNotes").classList.toggle("show",presenterNotesOn)}
-function exitPresentation(){clearPresentTimers();$("present").classList.remove("show");if(document.fullscreenElement)document.exitFullscreen&&document.exitFullscreen()}
+function exitPresentation(){$("present").classList.remove("show");if(document.fullscreenElement)document.exitFullscreen&&document.exitFullscreen()}
 
 /* =================== KEYBOARD =================== */
 document.addEventListener("keydown",e=>{
