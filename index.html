@@ -489,6 +489,12 @@ details.acc[open] summary::after{transform:rotate(180deg)}
         </div>
         <div class="rgroup-label">Timing — plays back in Present mode</div>
       </div>
+      <div class="rgroup" style="border-right:none;min-width:220px">
+        <div class="rgroup-row" style="width:100%">
+          <div id="animOrderList" style="width:100%;display:flex;flex-direction:column;gap:4px;max-height:96px;overflow:auto"></div>
+        </div>
+        <div class="rgroup-label">Play order on this slide</div>
+      </div>
     </div>
 
     <!-- VIEW -->
@@ -1359,6 +1365,9 @@ function applyThemeToDeck(themeId){
 const ANIM_DEFS=[["none","None"],["fadeIn","Fade In"],["flyInLeft","Fly In L"],["flyInRight","Fly In R"],["flyInUp","Fly In Up"],["flyInDown","Fly In Dn"],["zoomIn","Zoom In"],["bounceIn","Bounce"],["spin","Spin"],["pulse","Pulse"]];
 const ANIM_CLASS={fadeIn:'pa-fadeIn',flyInLeft:'pa-flyInLeft',flyInRight:'pa-flyInRight',flyInUp:'pa-flyInUp',flyInDown:'pa-flyInDown',zoomIn:'pa-zoomIn',bounceIn:'pa-bounceIn',spin:'pa-spin',pulse:'pa-pulse'};
 function ensureAnim(e){if(!e.anim)e.anim=defaultAnim();return e.anim}
+function elementLabel(e){
+  return e.type==="text"?(e.text.slice(0,18)||"Text box"):e.type==="image"?"Image":e.type==="icon"?("Icon · "+(ICON_LABELS[e.iconName]||e.iconName)):e.type==="chart"?("Chart · "+e.chartType):("Shape · "+e.shape);
+}
 function buildAnimPanel(){
   if(!$("animGrid"))return;
   const e=selectedEl();
@@ -1371,6 +1380,27 @@ function buildAnimPanel(){
   $("animDuration").disabled=!hasAnim;
   $("animDelay").value = e&&e.anim?e.anim.delay:0;
   $("animDelay").disabled=!hasAnim;
+  buildAnimOrderList();
+}
+function buildAnimOrderList(){
+  const box=$("animOrderList");if(!box)return;
+  const animated=deck.slides[current].elements.filter(el=>el.anim&&el.anim.type!=='none');
+  if(!animated.length){box.innerHTML='<div style="font-size:11px;color:var(--muted-2);padding:4px 2px">No animations on this slide yet.</div>';return}
+  box.innerHTML=animated.map((el,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:${selected===el.id?'var(--accent-soft)':'#fff'}">
+      <span style="font-size:10px;font-weight:700;color:var(--accent-ink);width:14px">${i+1}</span>
+      <span style="flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="selected='${el.id}';render()">${esc(elementLabel(el))}</span>
+      <button style="border:none;background:transparent;color:var(--muted);font-size:11px;padding:0 3px" title="Move earlier" onclick="reorderAnim('${el.id}',-1)" ${i===0?'disabled':''}>▲</button>
+      <button style="border:none;background:transparent;color:var(--muted);font-size:11px;padding:0 3px" title="Move later" onclick="reorderAnim('${el.id}',1)" ${i===animated.length-1?'disabled':''}>▼</button>
+    </div>`).join("");
+}
+function reorderAnim(id,dir){
+  const a=deck.slides[current].elements;
+  const animatedIds=a.filter(el=>el.anim&&el.anim.type!=='none').map(el=>el.id);
+  const pos=animatedIds.indexOf(id);const swapWith=pos+dir;
+  if(pos<0||swapWith<0||swapWith>=animatedIds.length)return;
+  const idA=a.findIndex(el=>el.id===id),idB=a.findIndex(el=>el.id===animatedIds[swapWith]);
+  snapshot();[a[idA],a[idB]]=[a[idB],a[idA]];render();scheduleSave();
 }
 function setAnimType(type){
   const e=selectedEl();if(!e)return toast("Select an element first");
@@ -1453,7 +1483,7 @@ function toHex(c){if(!c)return"#ffffff";if(c[0]==="#")return c;const d=document.
 
 function updateFormatPanel(){
   let p=$("inspFormat"),e=selectedEl();
-  if(!e){p.innerHTML='<div class="empty-panel">Select an element on the slide to edit its fill, line, text and position.</div>';return}
+  if(!e){p.innerHTML='<div class="empty-panel">Select an element on the slide to edit its fill, line, text, position, and animation.</div>';return}
   let html=`<details class="acc" open><summary>Position &amp; size</summary><div class="acc-body">
     <div class="row"><div class="field"><label>X %</label><input type="number" value="${round(e.x)}" oninput="liveSet('x',+this.value)"></div><div class="field"><label>Y %</label><input type="number" value="${round(e.y)}" oninput="liveSet('y',+this.value)"></div></div>
     <div class="row"><div class="field"><label>Width %</label><input type="number" value="${round(e.w)}" oninput="liveSet('w',+this.value)"></div><div class="field"><label>Height %</label><input type="number" value="${round(e.h)}" oninput="liveSet('h',+this.value)"></div></div>
@@ -1482,8 +1512,29 @@ function updateFormatPanel(){
     </select></div>
     <div class="field"><label>Data (label,value per line)</label><textarea oninput="setChartData(this.value)" style="min-height:110px">${esc((e.data||[]).map(d=>d.label+","+d.value).join("\n"))}</textarea></div>
   </div></details>`;
-  const animInfo=e.anim&&e.anim.type!=='none'?`${(ANIM_DEFS.find(a=>a[0]===e.anim.type)||[,e.anim.type])[1]} · ${e.anim.trigger}`:'None';
-  html+=`<details class="acc"><summary>Animation</summary><div class="acc-body" style="font-size:12px;color:var(--muted)">${animInfo}<br><span style="font-size:11px">Set on the Animations tab in the ribbon.</span></div></details>`;
+  const anim=ensureAnim(e);
+  const hasAnim=anim.type!=='none';
+  html+=`<details class="acc" open><summary>Animation${hasAnim?' <span style="font-weight:400;color:var(--accent-ink)">· '+(ANIM_DEFS.find(a=>a[0]===anim.type)||[,anim.type])[1]+'</span>':''}</summary><div class="acc-body">
+    <div class="field"><label>Entrance effect</label>
+      <select oninput="setAnimType(this.value)">
+        ${ANIM_DEFS.map(([k,label])=>`<option value="${k}" ${anim.type===k?'selected':''}>${label}</option>`).join("")}
+      </select>
+    </div>
+    ${hasAnim?`
+    <div class="field"><label>Start</label>
+      <select onchange="setAnimTrigger(this.value)">
+        <option value="onClick" ${anim.trigger==='onClick'?'selected':''}>On Click</option>
+        <option value="withPrevious" ${anim.trigger==='withPrevious'?'selected':''}>With Previous</option>
+        <option value="afterPrevious" ${anim.trigger==='afterPrevious'?'selected':''}>After Previous</option>
+      </select>
+    </div>
+    <div class="row">
+      <div class="field"><label>Duration (s)</label><input type="number" min="0.1" max="5" step="0.1" value="${anim.duration}" onchange="setAnimDuration(+this.value)"></div>
+      <div class="field"><label>Delay (s)</label><input type="number" min="0" max="5" step="0.1" value="${anim.delay}" onchange="setAnimDelay(+this.value)"></div>
+    </div>
+    <div class="checks"><button class="check" onclick="previewAnim()">▶ Preview</button><button class="check" onclick="setAnimType('none')">Remove</button></div>
+    `:`<div style="font-size:11.5px;color:var(--muted-2);padding:2px 1px">Pick an effect above to make this element animate in during Present mode.</div>`}
+  </div></details>`;
   html+=`<details class="acc"><summary>Arrange</summary><div class="acc-body">
     <div class="checks"><button class="check" onclick="bringToFront()">Front</button><button class="check" onclick="sendToBack()">Back</button></div>
     <div class="checks" style="margin-top:6px"><button class="check ${e.locked?'active':''}" onclick="toggleFlag('locked')">${e.locked?'Locked':'Lock'}</button><button class="check ${e.hidden?'active':''}" onclick="toggleFlag('hidden')">${e.hidden?'Hidden':'Hide'}</button></div>
@@ -1512,10 +1563,12 @@ function updateLayersPanel(){
   const els=deck.slides[current].elements;
   if(!els.length){box.innerHTML='<div class="empty-panel">No elements on this slide yet. Use Insert to add text, images, shapes, icons, or charts.</div>';return}
   box.innerHTML=`<div class="layer-list">`+els.slice().reverse().map(e=>{
-    const label=e.type==="text"?(e.text.slice(0,22)||"Text box"):e.type==="image"?"Image":e.type==="icon"?("Icon · "+(ICON_LABELS[e.iconName]||e.iconName)):e.type==="chart"?("Chart · "+e.chartType):("Shape · "+e.shape);
+    const label=elementLabel(e);
     const icon=e.type==="text"?"🗛":e.type==="image"?"🖼":e.type==="icon"?"✦":e.type==="chart"?"📊":"◆";
+    const hasAnim=e.anim&&e.anim.type!=='none';
     return `<div class="layer-row ${selected===e.id?'active':''}" onclick="selectFromLayer('${e.id}')">
       <span>${icon}</span><span class="lname">${esc(label)}</span>
+      ${hasAnim?'<span title="Has an entrance animation" style="font-size:11px;color:var(--accent-ink)">✦</span>':''}
       <button onclick="event.stopPropagation();toggleFlagFor('${e.id}','locked')" title="Lock">${e.locked?"🔒":"🔓"}</button>
       <button onclick="event.stopPropagation();toggleFlagFor('${e.id}','hidden')" title="Hide">${e.hidden?"🚫":"👁"}</button>
     </div>`;
