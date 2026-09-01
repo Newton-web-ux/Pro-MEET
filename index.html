@@ -575,13 +575,11 @@ details.acc[open] summary::after{transform:rotate(180deg)}
   </div>
 </div>
 
-<!-- Chart type picker modal -->
+<!-- Chart type / data picker modal -->
 <div id="chartModal" class="modal">
   <div class="modalbox" style="position:relative">
     <button class="ed-iconbtn modal-close" style="color:var(--ink)" onclick="closeChartPicker()">✕</button>
-    <h2>Insert a chart</h2>
-    <p class="sub">Pick a chart type — you can edit the data afterward in the Format panel.</p>
-    <div class="chartgrid" id="chartGrid"></div>
+    <div id="chartModalBody"></div>
   </div>
 </div>
 
@@ -1304,21 +1302,59 @@ function chooseIcon(name){
   }
 }
 
-/* ---- chart picker ---- */
+/* ---- chart picker (type select -> user data entry) ---- */
 const CHART_TYPES=[["bar","Bar"],["line","Line"],["pie","Pie"],["donut","Donut"]];
+function parseChartDataText(text){
+  return (text||"").split("\n").map(line=>{
+    const parts=line.split(",");
+    return {label:(parts[0]||"").trim(),value:parseFloat(parts[1])||0};
+  }).filter(d=>d.label);
+}
 function buildChartGrid(){
   const sample=[{label:"A",value:8},{label:"B",value:14},{label:"C",value:6}];
-  $("chartGrid").innerHTML=CHART_TYPES.map(([k,label])=>
-    `<button class="chart-pick" onclick="chooseChart('${k}')">${renderChartSVG({chartType:k,data:sample})}<span>${label}</span></button>`
-  ).join("");
+  $("chartModalBody").innerHTML=`
+    <h2>Insert a chart</h2>
+    <p class="sub">Pick a chart type — you'll enter your own data on the next step.</p>
+    <div class="chartgrid" id="chartGrid">
+      ${CHART_TYPES.map(([k,label])=>`<button class="chart-pick" onclick="chooseChart('${k}')">${renderChartSVG({chartType:k,data:sample})}<span>${label}</span></button>`).join("")}
+    </div>`;
+}
+function chartTypeLabel(type){return (CHART_TYPES.find(t=>t[0]===type)||[,type])[1]}
+function buildChartDataStep(type){
+  const sampleText="Category A,10\nCategory B,20\nCategory C,15\nCategory D,25";
+  $("chartModalBody").innerHTML=`
+    <h2>Enter your ${esc(chartTypeLabel(type))} chart data</h2>
+    <p class="sub">One row per data point, as <code>label,value</code>. Edit the sample below or paste your own, then insert.</p>
+    <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <div class="field"><label>Data</label><textarea id="chartDataInput" style="min-height:170px;font-family:monospace" oninput="updateChartPreview('${type}')">${sampleText}</textarea></div>
+      </div>
+      <div style="width:220px;flex:none">
+        <div class="field"><label>Preview</label></div>
+        <div id="chartDataPreview" style="border:1px solid var(--line);border-radius:9px;background:#fff;padding:8px"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="pill-btn" onclick="buildChartGrid()">← Back</button>
+      <button class="pill-btn primary" onclick="insertChartFromData('${type}')">Insert chart</button>
+    </div>`;
+  updateChartPreview(type);
+}
+function updateChartPreview(type){
+  const data=parseChartDataText($("chartDataInput").value);
+  $("chartDataPreview").innerHTML=renderChartSVG({chartType:type,data});
+}
+function insertChartFromData(type){
+  const data=parseChartDataText($("chartDataInput").value);
+  if(!data.length)return toast("Add at least one row of data");
+  closeChartPicker();
+  snapshot();
+  let e=chartEl(20,20,60,45,type,data);
+  deck.slides[current].elements.push(e);selected=e.id;render();scheduleSave();
 }
 function openChartPicker(){buildChartGrid();$("chartModal").classList.add("show")}
 function closeChartPicker(){$("chartModal").classList.remove("show")}
-function chooseChart(type){
-  closeChartPicker();snapshot();
-  let e=chartEl(20,20,60,45,type);
-  deck.slides[current].elements.push(e);selected=e.id;render();scheduleSave();
-}
+function chooseChart(type){buildChartDataStep(type)}
 
 $("imagePicker").onchange=ev=>{
   let f=ev.target.files[0];if(!f)return;let reader=new FileReader();
@@ -1544,7 +1580,7 @@ function updateFormatPanel(){
 function setChartType(v){let e=selectedEl();if(!e||e.type!=="chart")return;snapshot();e.chartType=v;render();scheduleSave()}
 function setChartData(text){
   let e=selectedEl();if(!e||e.type!=="chart")return;snapshot();
-  e.data=text.split("\n").map(line=>{const parts=line.split(",");return{label:(parts[0]||"").trim(),value:parseFloat(parts[1])||0}}).filter(d=>d.label);
+  e.data=parseChartDataText(text);
   renderCanvas();renderThumbs();scheduleSave();
 }
 function round(n){return Math.round(n*10)/10}
