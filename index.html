@@ -436,10 +436,13 @@ details.acc[open] summary::after{transform:rotate(180deg)}
       <div class="rgroup">
         <div class="rgroup-row">
           <button class="rbtn" title="Cube" onclick="addShape('cube3d')">⬛</button>
+          <button class="rbtn" title="Box" onclick="addShape('cuboid3d')">▤</button>
           <button class="rbtn" title="Cylinder" onclick="addShape('cylinder3d')">⬭</button>
           <button class="rbtn" title="Cone" onclick="addShape('cone3d')">▲</button>
           <button class="rbtn" title="Pyramid" onclick="addShape('pyramid3d')">🔺</button>
+          <button class="rbtn" title="Prism" onclick="addShape('prism3d')">◺</button>
           <button class="rbtn" title="Sphere" onclick="addShape('sphere3d')">⬤</button>
+          <button class="rbtn" title="Dome" onclick="addShape('hemisphere3d')">◓</button>
         </div>
         <div class="rgroup-label">3D Shapes</div>
       </div>
@@ -956,7 +959,7 @@ function renderMiniSlide(container,slide,isDark){
     container.appendChild(d);
   });
 }
-const COMPOUND_SHAPES=new Set(["cube3d","cylinder3d","cone3d","pyramid3d","cloud"]);
+const COMPOUND_SHAPES=new Set(["cube3d","cuboid3d","cylinder3d","cone3d","pyramid3d","prism3d","sphere3d","hemisphere3d","cloud"]);
 function shadeColor(hex,percent){
   hex=(hex||"#4F46E5").replace('#','');
   if(hex.length===3)hex=hex.split('').map(c=>c+c).join('');
@@ -967,10 +970,10 @@ function shadeColor(hex,percent){
   return "#"+r.toString(16).padStart(2,"0")+g.toString(16).padStart(2,"0")+b.toString(16).padStart(2,"0");
 }
 function styleShapeDiv(d,e){
-  d.innerHTML="";d.style.clipPath="none";
+  d.innerHTML="";d.style.clipPath="none";d.style.filter="none";
   if(COMPOUND_SHAPES.has(e.shape)){buildCompoundShapeFaces(d,e);return}
   const base={background:e.shape==="line"?"transparent":e.fill,border:`${e.strokeWidth}px solid ${e.stroke}`};
-  if(e.shape==="ellipse"||e.shape==="sphere3d")base.borderRadius="50%";
+  if(e.shape==="ellipse")base.borderRadius="50%";
   else if(e.shape==="roundRect")base.borderRadius="14%";
   else if(e.shape==="rect"||e.shape==="line")base.borderRadius="2px";
   else base.borderRadius="0";
@@ -990,27 +993,59 @@ function styleShapeDiv(d,e){
   else if(e.shape==="speechBubble")solid("polygon(0% 0%,100% 0%,100% 70%,35% 70%,20% 100%,20% 70%,0% 70%)");
   else if(e.shape==="heart")solid("polygon(50% 15%,61% 5%,75% 5%,87% 12%,95% 25%,95% 40%,85% 55%,50% 85%,15% 55%,5% 40%,5% 25%,13% 12%,25% 5%,39% 5%)");
   else if(e.shape==="donut"){d.style.border="none";d.style.borderRadius="50%";d.style.background=`radial-gradient(circle, transparent 0 54%, ${e.fill} 55% 100%)`}
-  else if(e.shape==="sphere3d"){d.style.border="none";d.style.background=`radial-gradient(circle at 35% 30%, ${shadeColor(e.fill,25)}, ${e.fill} 55%, ${shadeColor(e.fill,-30)} 100%)`}
 }
+/* Realistic 3D shape rendering — each shape is built from multiple shaded faces
+   (highlight / base / shadow tones derived from the fill color) plus a soft
+   drop shadow, so shapes read as lit, three-dimensional solids rather than flat
+   CSS tricks. */
 function buildCompoundShapeFaces(d,e){
   const base=e.fill&&e.fill!=="transparent"?e.fill:"#4F46E5";
-  const light=shadeColor(base,24),dark=shadeColor(base,-22);
+  const lighter=shadeColor(base,42), light=shadeColor(base,24), dark=shadeColor(base,-24), darker=shadeColor(base,-42);
   d.style.background="transparent";d.style.border="none";d.style.borderRadius="0";
-  const face=styleObj=>{const f=document.createElement("div");f.className="shape-face";Object.assign(f.style,styleObj);d.appendChild(f)};
+  d.style.filter="drop-shadow(0 4px 10px rgba(15,23,42,.24))";
+  const face=styleObj=>{const f=document.createElement("div");f.className="shape-face";Object.assign(f.style,styleObj);d.appendChild(f);return f};
+
   if(e.shape==="cube3d"){
-    face({left:"12%",top:"0%",width:"76%",height:"30%",background:light,clipPath:"polygon(12% 100%,100% 100%,88% 0%,0% 0%)"});
-    face({left:"0%",top:"20%",width:"78%",height:"80%",background:base});
-    face({left:"70%",top:"20%",width:"30%",height:"80%",background:dark,clipPath:"polygon(0% 0%,100% 12%,100% 100%,0% 88%)"});
-  }else if(e.shape==="cylinder3d"){
-    face({left:"0%",top:"0%",width:"100%",height:"20%",background:light,borderRadius:"50%"});
-    face({left:"0%",top:"10%",width:"100%",height:"80%",background:`linear-gradient(90deg,${dark},${base} 45%,${light} 60%,${dark})`,borderRadius:"0 0 50% 50%/0 0 16% 16%"});
-  }else if(e.shape==="cone3d"){
-    face({left:"0%",top:"80%",width:"100%",height:"20%",background:dark,borderRadius:"50%"});
-    face({left:"0%",top:"0%",width:"100%",height:"88%",background:`linear-gradient(100deg,${dark},${light} 45%,${base})`,clipPath:"polygon(50% 0%,100% 100%,0% 100%)"});
-  }else if(e.shape==="pyramid3d"){
-    face({left:"0%",top:"0%",width:"52%",height:"100%",background:light,clipPath:"polygon(100% 0%,100% 100%,0% 100%)"});
-    face({left:"48%",top:"0%",width:"52%",height:"100%",background:dark,clipPath:"polygon(0% 0%,100% 100%,0% 100%)"});
-  }else if(e.shape==="cloud"){
+    // top, front and right-side faces of an isometric cube, each independently shaded
+    face({left:"14%",top:"0%",width:"72%",height:"26%",background:`linear-gradient(135deg,${lighter},${light} 70%)`,clipPath:"polygon(14% 100%,100% 100%,86% 0%,0% 0%)"});
+    face({left:"0%",top:"18%",width:"76%",height:"82%",background:`linear-gradient(160deg,${light},${base} 60%)`});
+    face({left:"68%",top:"18%",width:"32%",height:"82%",background:`linear-gradient(20deg,${dark},${darker})`,clipPath:"polygon(0% 0%,100% 10%,100% 100%,0% 90%)"});
+  }
+  else if(e.shape==="cuboid3d"){
+    // wider, flatter box so it reads distinctly from the cube
+    face({left:"10%",top:"0%",width:"78%",height:"16%",background:`linear-gradient(135deg,${lighter},${light} 70%)`,clipPath:"polygon(10% 100%,100% 100%,90% 0%,0% 0%)"});
+    face({left:"0%",top:"10%",width:"82%",height:"90%",background:`linear-gradient(170deg,${light},${base} 65%)`});
+    face({left:"76%",top:"10%",width:"24%",height:"90%",background:`linear-gradient(15deg,${dark},${darker})`,clipPath:"polygon(0% 0%,100% 6%,100% 100%,0% 94%)"});
+  }
+  else if(e.shape==="cylinder3d"){
+    face({left:"2%",top:"80%",width:"96%",height:"20%",background:`linear-gradient(90deg,${darker},${dark} 45%,${light} 90%)`,borderRadius:"50%"});
+    face({left:"0%",top:"9%",width:"100%",height:"82%",background:`linear-gradient(90deg,${darker} 0%,${dark} 18%,${base} 42%,${light} 60%,${lighter} 70%,${light} 82%,${dark} 100%)`});
+    face({left:"0%",top:"0%",width:"100%",height:"20%",background:`radial-gradient(ellipse at 38% 32%,${lighter},${light} 55%,${base} 100%)`,borderRadius:"50%"});
+  }
+  else if(e.shape==="cone3d"){
+    face({left:"6%",top:"84%",width:"88%",height:"16%",background:`linear-gradient(90deg,${darker},${dark} 55%,${base})`,borderRadius:"50%"});
+    face({left:"0%",top:"0%",width:"100%",height:"92%",background:`linear-gradient(100deg,${darker} 0%,${dark} 22%,${light} 50%,${lighter} 58%,${base} 100%)`,clipPath:"polygon(50% 0%,96% 100%,4% 100%)"});
+  }
+  else if(e.shape==="pyramid3d"){
+    face({left:"5%",top:"80%",width:"90%",height:"20%",background:darker,clipPath:"polygon(0% 0%,100% 0%,86% 100%,14% 100%)",opacity:"0.5"});
+    face({left:"0%",top:"0%",width:"52%",height:"100%",background:`linear-gradient(100deg,${lighter},${light} 85%)`,clipPath:"polygon(100% 0%,100% 100%,0% 100%)"});
+    face({left:"48%",top:"0%",width:"52%",height:"100%",background:`linear-gradient(260deg,${dark},${darker} 85%)`,clipPath:"polygon(0% 0%,100% 100%,0% 100%)"});
+  }
+  else if(e.shape==="prism3d"){
+    // triangular prism lying on its side, front triangle + shaded top/side sweep
+    face({left:"30%",top:"6%",width:"70%",height:"88%",background:`linear-gradient(20deg,${dark},${darker} 80%)`,clipPath:"polygon(12% 0%,100% 26%,100% 100%,12% 100%)"});
+    face({left:"0%",top:"0%",width:"58%",height:"100%",background:`linear-gradient(105deg,${lighter},${light} 80%)`,clipPath:"polygon(0% 100%,42% 0%,100% 100%)"});
+  }
+  else if(e.shape==="sphere3d"){
+    face({left:"0%",top:"0%",width:"100%",height:"100%",borderRadius:"50%",background:`radial-gradient(circle at 34% 30%,${lighter},${light} 32%,${base} 62%,${dark} 86%,${darker} 100%)`});
+    face({left:"17%",top:"13%",width:"30%",height:"20%",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.9),rgba(255,255,255,0) 72%)"});
+  }
+  else if(e.shape==="hemisphere3d"){
+    face({left:"0%",top:"66%",width:"100%",height:"34%",background:`linear-gradient(180deg,${dark},${darker})`,borderRadius:"50%"});
+    face({left:"0%",top:"0%",width:"100%",height:"78%",background:`radial-gradient(circle at 36% 22%,${lighter},${light} 42%,${base} 78%,${dark} 100%)`,borderRadius:"50% 50% 0 0"});
+  }
+  else if(e.shape==="cloud"){
+    d.style.filter="none";
     face({left:"0%",top:"35%",width:"100%",height:"55%",background:base,borderRadius:"38%"});
     face({left:"6%",top:"4%",width:"48%",height:"66%",background:base,borderRadius:"50%"});
     face({left:"40%",top:"0%",width:"56%",height:"72%",background:base,borderRadius:"50%"});
@@ -1667,7 +1702,7 @@ async function exportPPTX(){
           const map={ellipse:"ellipse",roundRect:"roundRect",triangle:"triangle",rightArrow:"rightArrow",star:"star5",line:"line",
             diamond:"diamond",pentagon:"pentagon",hexagon:"hexagon",parallelogram:"parallelogram",trapezoid:"trapezoid",
             plus:"plus",chevron:"chevron",doubleArrow:"leftRightArrow",speechBubble:"wedgeRectCallout",donut:"donut",heart:"heart",
-            cube3d:"cube",cylinder3d:"can",cone3d:"cone",pyramid3d:"triangle",sphere3d:"ellipse",cloud:"cloud"};
+            cube3d:"cube",cuboid3d:"cube",cylinder3d:"can",cone3d:"cone",pyramid3d:"triangle",prism3d:"triangle",sphere3d:"ellipse",hemisphere3d:"ellipse",cloud:"cloud"};
           const name=map[e.shape];
           if(name&&pptx.ShapeType[name])st=pptx.ShapeType[name];
         }catch(err){st=pptx.ShapeType.rect}
