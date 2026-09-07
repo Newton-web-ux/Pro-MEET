@@ -171,6 +171,10 @@ button{cursor:pointer}
 .icon-el svg{width:100%;height:100%;display:block;pointer-events:none}
 .chart-el{cursor:move;background:transparent}
 .chart-el svg{width:100%;height:100%;display:block;pointer-events:none}
+.table-el{cursor:move;overflow:hidden}
+.table-cell{display:flex;align-items:center;padding:4px 7px;overflow:hidden;box-sizing:border-box;outline:none;line-height:1.25;word-break:break-word}
+.element.editing.table-el{cursor:default}
+.element.editing .table-cell{cursor:text}
 .handle{position:absolute;width:9px;height:9px;background:#fff;border:1.5px solid var(--accent);border-radius:2px;z-index:3}
 .h-nw{left:-5px;top:-5px;cursor:nwse-resize}.h-ne{right:-5px;top:-5px;cursor:nesw-resize}
 .h-sw{left:-5px;bottom:-5px;cursor:nesw-resize}.h-se{right:-5px;bottom:-5px;cursor:nwse-resize}
@@ -453,12 +457,18 @@ details.acc[open] summary::after{transform:rotate(180deg)}
         </div>
         <div class="rgroup-label">3D Shapes</div>
       </div>
-      <div class="rgroup" style="border-right:none">
+      <div class="rgroup">
         <div class="rgroup-row">
           <button class="rbtn-lg" onclick="openIconPicker()">✦<span>Icon</span></button>
           <button class="rbtn-lg" onclick="openChartPicker()">📊<span>Chart</span></button>
         </div>
         <div class="rgroup-label">Icons &amp; Charts</div>
+      </div>
+      <div class="rgroup" style="border-right:none">
+        <div class="rgroup-row">
+          <button class="rbtn-lg" onclick="openTablePicker()">⊞<span>Table</span></button>
+        </div>
+        <div class="rgroup-label">Table</div>
       </div>
     </div>
 
@@ -605,6 +615,24 @@ details.acc[open] summary::after{transform:rotate(180deg)}
   <div class="modalbox" style="position:relative">
     <button class="ed-iconbtn modal-close" style="color:var(--ink)" onclick="closeChartPicker()">✕</button>
     <div id="chartModalBody"></div>
+  </div>
+</div>
+
+<!-- Table row/column picker modal -->
+<div id="tableModal" class="modal">
+  <div class="modalbox" style="position:relative">
+    <button class="ed-iconbtn modal-close" style="color:var(--ink)" onclick="closeTablePicker()">✕</button>
+    <h2>Insert a table</h2>
+    <p class="sub">Choose how many rows and columns you need — you can add or remove more afterward from the Format panel.</p>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+      <div class="field" style="width:100px"><label>Rows</label><input id="tableRowsInput" type="number" min="1" max="20" value="3"></div>
+      <div class="field" style="width:100px"><label>Columns</label><input id="tableColsInput" type="number" min="1" max="12" value="3"></div>
+      <div class="field" style="display:flex;align-items:center;gap:6px;width:auto;padding-bottom:7px">
+        <input id="tableHeaderInput" type="checkbox" checked style="width:auto">
+        <label style="margin:0">Header row</label>
+      </div>
+      <button class="pill-btn primary" onclick="insertTableFromPicker()">Insert table</button>
+    </div>
   </div>
 </div>
 
@@ -756,6 +784,20 @@ function chartEl(x,y,w,h,chartType,data){
   return {id:uid(),type:"chart",chartType:chartType||"bar",
     data:data||[{label:"Q1",value:10},{label:"Q2",value:25},{label:"Q3",value:15},{label:"Q4",value:30}],
     x,y,w,h,opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()}
+}
+function tableEl(x,y,w,h,rows,cols,theme){
+  const t=themeOf(theme);
+  const cells=[];
+  for(let r=0;r<rows;r++){
+    const row=[];
+    for(let c=0;c<cols;c++)row.push(r===0?`Header ${c+1}`:`Cell ${r+1},${c+1}`);
+    cells.push(row);
+  }
+  return {id:uid(),type:"table",rows,cols,cells,
+    headerRow:true,borderColor:t.muted,borderWidth:1,
+    headerBg:t.accent,headerColor:"#FFFFFF",cellBg:"#FFFFFF",altRowBg:t.soft,useAltRows:true,
+    textColor:t.ink,fontSize:14,
+    x,y,w,h,opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()};
 }
 const CHART_PALETTE=["#4F46E5","#F59E0B","#10B981","#EF4444","#0EA5E9","#8B5CF6","#EC4899","#84CC16"];
 /* stroke-only 24x24 icon paths — inner markup only, wrapped with an <svg> at render time */
@@ -1028,6 +1070,7 @@ function renderMiniSlide(container,slide,isDark,aspect){
     else if(e.type==="shape"){styleShapeDiv(d,e)}
     else if(e.type==="icon"){d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`}
     else if(e.type==="chart"){d.innerHTML=renderChartSVG(e)}
+    else if(e.type==="table"){d.innerHTML=renderTableHTML(e,false)}
     container.appendChild(d);
   });
 }
@@ -1231,6 +1274,21 @@ function renderChartSVG(e){
   return`<svg viewBox="0 0 ${W} ${H}">${bars}${labels}</svg>`;
 }
 
+/* =================== TABLES =================== */
+function tableGridStyle(e){
+  return `display:grid;grid-template-columns:repeat(${e.cols},1fr);grid-template-rows:repeat(${e.rows},1fr);width:100%;height:100%;`;
+}
+function renderTableHTML(e,editable){
+  const rowsHtml=e.cells.map((row,ri)=>row.map((val,ci)=>{
+    const isHeader=e.headerRow&&ri===0;
+    const bg=isHeader?e.headerBg:(e.useAltRows&&ri%2===1?e.altRowBg:e.cellBg);
+    const color=isHeader?e.headerColor:e.textColor;
+    const editAttrs=editable?`contenteditable="true" data-row="${ri}" data-col="${ci}"`:``;
+    return `<div class="table-cell" style="background:${bg};color:${color};border:${e.borderWidth}px solid ${e.borderColor};font-size:${e.fontSize}px;${isHeader?'font-weight:700;':''}" ${editAttrs}>${esc(val)}</div>`;
+  }).join("")).join("");
+  return `<div style="${tableGridStyle(e)}">${rowsHtml}</div>`;
+}
+
 
 /* =================== EDITOR CORE =================== */
 function snapshot(){undoStack.push(clone(deck));if(undoStack.length>60)undoStack.shift();redoStack=[];refreshHistBtns()}
@@ -1278,7 +1336,7 @@ function renderCanvas(){
 function renderElement(c,e){
   if(e.hidden)return;
   let d;
-  const isEditing=e.type==="text"&&editingId===e.id;
+  const isEditing=(e.type==="text"||e.type==="table")&&editingId===e.id;
   if(e.type==="text"){
     d=document.createElement("div");d.className="element text-el";
     d.contentEditable=isEditing&&!e.locked;
@@ -1292,6 +1350,7 @@ function renderElement(c,e){
   else if(e.type==="image"){d=document.createElement("img");d.className="element image-el";d.src=e.src}
   else if(e.type==="icon"){d=document.createElement("div");d.className="element icon-el"}
   else if(e.type==="chart"){d=document.createElement("div");d.className="element chart-el"}
+  else if(e.type==="table"){d=document.createElement("div");d.className="element table-el"}
   else{d=document.createElement("div");d.className="element shape-el"}
   d.dataset.id=e.id;
   Object.assign(d.style,{left:e.x+"%",top:e.y+"%",width:e.w+"%",height:e.h+"%",opacity:e.opacity??1,transform:`rotate(${e.rotation||0}deg)`});
@@ -1303,6 +1362,25 @@ function renderElement(c,e){
   if(e.type==="shape")styleShapeDiv(d,e);
   if(e.type==="icon")d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`;
   if(e.type==="chart")d.innerHTML=renderChartSVG(e);
+  if(e.type==="table"){
+    d.innerHTML=renderTableHTML(e,isEditing);
+    if(isEditing){
+      d.querySelectorAll(".table-cell").forEach(cell=>{
+        cell.oninput=()=>{
+          const r=+cell.dataset.row,ci=+cell.dataset.col;
+          e.cells[r][ci]=cell.innerText;
+          scheduleSave();
+        };
+      });
+      d.addEventListener("focusout",()=>{
+        requestAnimationFrame(()=>{
+          if(editingId===e.id&&!d.contains(document.activeElement)){
+            editingId=null;renderCanvas();updateFormatPanel();updateLayersPanel();renderThumbs();scheduleSave();
+          }
+        });
+      });
+    }
+  }
   if(e.locked)d.classList.add("locked");
   if(isEditing)d.classList.add("editing");
   d.onclick=ev=>{
@@ -1314,6 +1392,7 @@ function renderElement(c,e){
   d.ondblclick=ev=>{
     ev.stopPropagation();
     if(e.type==="text"&&!e.locked)enterTextEdit(e.id,ev);
+    if(e.type==="table"&&!e.locked)enterTableEdit(e.id,ev);
   };
   if(!e.locked&&!isEditing)makeDrag(d,e);
   if(selected===e.id&&!isEditing){
@@ -1340,6 +1419,23 @@ function enterTextEdit(id,ev){
     node.focus();
     if(ev&&typeof ev.clientX==="number")placeCaretAtPoint(node,ev.clientX,ev.clientY);
     else placeCaretAtEnd(node);
+  });
+}
+function enterTableEdit(id,ev){
+  const el=deck.slides[current].elements.find(x=>x.id===id);
+  if(!el||el.locked||el.type!=="table")return;
+  selected=id;editingId=id;
+  renderCanvas();updateFormatPanel();updateLayersPanel();
+  requestAnimationFrame(()=>{
+    const cells=[...$("canvas").querySelectorAll('.table-el[data-id="'+id+'"] .table-cell')];
+    if(!cells.length)return;
+    let target=cells[0];
+    if(ev&&typeof ev.clientX==="number"){
+      const hit=document.elementFromPoint(ev.clientX,ev.clientY);
+      if(hit&&hit.classList.contains("table-cell"))target=hit;
+    }
+    target.focus();
+    placeCaretAtEnd(target);
   });
 }
 function placeCaretAtPoint(node,x,y){
@@ -1531,6 +1627,52 @@ function openChartPicker(){buildChartGrid();$("chartModal").classList.add("show"
 function closeChartPicker(){$("chartModal").classList.remove("show")}
 function chooseChart(type){buildChartDataStep(type)}
 
+/* ---- table picker ---- */
+function openTablePicker(){
+  $("tableRowsInput").value=3;$("tableColsInput").value=3;$("tableHeaderInput").checked=true;
+  $("tableModal").classList.add("show");
+}
+function closeTablePicker(){$("tableModal").classList.remove("show")}
+function insertTableFromPicker(){
+  const rows=Math.max(1,Math.min(20,parseInt($("tableRowsInput").value,10)||3));
+  const cols=Math.max(1,Math.min(12,parseInt($("tableColsInput").value,10)||3));
+  const header=$("tableHeaderInput").checked;
+  closeTablePicker();
+  snapshot();
+  const e=tableEl(15,25,70,45,rows,cols,deck.theme);
+  e.headerRow=header;
+  if(!header)e.cells=e.cells.map((row,ri)=>row.map((_,ci)=>`Cell ${ri+1},${ci+1}`));
+  deck.slides[current].elements.push(e);selected=e.id;render();scheduleSave();
+}
+function addTableRow(){
+  const e=selectedEl();if(!e||e.type!=="table")return;
+  snapshot();
+  e.cells.push(Array.from({length:e.cols},(_,ci)=>`Cell ${e.rows+1},${ci+1}`));
+  e.rows++;render();scheduleSave();
+}
+function removeTableRow(){
+  const e=selectedEl();if(!e||e.type!=="table"||e.rows<=1)return;
+  snapshot();e.cells.pop();e.rows--;render();scheduleSave();
+}
+function addTableCol(){
+  const e=selectedEl();if(!e||e.type!=="table")return;
+  snapshot();
+  e.cells.forEach((row,ri)=>row.push(ri===0&&e.headerRow?`Header ${e.cols+1}`:`Cell ${ri+1},${e.cols+1}`));
+  e.cols++;render();scheduleSave();
+}
+function removeTableCol(){
+  const e=selectedEl();if(!e||e.type!=="table"||e.cols<=1)return;
+  snapshot();e.cells.forEach(row=>row.pop());e.cols--;render();scheduleSave();
+}
+function toggleTableHeader(){
+  const e=selectedEl();if(!e||e.type!=="table")return;
+  snapshot();e.headerRow=!e.headerRow;render();scheduleSave();
+}
+function toggleTableAltRows(){
+  const e=selectedEl();if(!e||e.type!=="table")return;
+  snapshot();e.useAltRows=!e.useAltRows;render();scheduleSave();
+}
+
 $("imagePicker").onchange=ev=>{
   let f=ev.target.files[0];if(!f)return;let reader=new FileReader();
   reader.onload=()=>{snapshot();let e={id:uid(),type:"image",src:reader.result,x:20,y:20,w:55,h:45,opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()};deck.slides[current].elements.push(e);selected=e.id;render();scheduleSave()};
@@ -1577,7 +1719,7 @@ const ANIM_DEFS=[["none","None"],["fadeIn","Fade In"],["flyInLeft","Fly In L"],[
 const ANIM_CLASS={fadeIn:'pa-fadeIn',flyInLeft:'pa-flyInLeft',flyInRight:'pa-flyInRight',flyInUp:'pa-flyInUp',flyInDown:'pa-flyInDown',zoomIn:'pa-zoomIn',bounceIn:'pa-bounceIn',spin:'pa-spin',pulse:'pa-pulse'};
 function ensureAnim(e){if(!e.anim)e.anim=defaultAnim();return e.anim}
 function elementLabel(e){
-  return e.type==="text"?(e.text.slice(0,18)||"Text box"):e.type==="image"?"Image":e.type==="icon"?("Icon · "+(ICON_LABELS[e.iconName]||e.iconName)):e.type==="chart"?("Chart · "+e.chartType):("Shape · "+e.shape);
+  return e.type==="text"?(e.text.slice(0,18)||"Text box"):e.type==="image"?"Image":e.type==="icon"?("Icon · "+(ICON_LABELS[e.iconName]||e.iconName)):e.type==="chart"?("Chart · "+e.chartType):e.type==="table"?("Table "+e.rows+"×"+e.cols):("Shape · "+e.shape);
 }
 function buildAnimPanel(){
   if(!$("animGrid"))return;
@@ -1749,6 +1891,17 @@ function updateFormatPanel(){
     </select></div>
     <div class="field"><label>Data (label,value per line)</label><textarea oninput="setChartData(this.value)" style="min-height:110px">${esc((e.data||[]).map(d=>d.label+","+d.value).join("\n"))}</textarea></div>
   </div></details>`;
+  if(e.type==="table")html+=`<details class="acc" open><summary>Table</summary><div class="acc-body">
+    <div class="row">
+      <div class="field"><label>Rows</label><div style="display:flex;gap:4px;align-items:center"><button class="check" onclick="removeTableRow()">−</button><span style="flex:1;text-align:center;font-weight:700">${e.rows}</span><button class="check" onclick="addTableRow()">+</button></div></div>
+      <div class="field"><label>Columns</label><div style="display:flex;gap:4px;align-items:center"><button class="check" onclick="removeTableCol()">−</button><span style="flex:1;text-align:center;font-weight:700">${e.cols}</span><button class="check" onclick="addTableCol()">+</button></div></div>
+    </div>
+    <div class="checks"><button class="check ${e.headerRow?'active':''}" onclick="toggleTableHeader()">Header row</button><button class="check ${e.useAltRows?'active':''}" onclick="toggleTableAltRows()">Striped rows</button></div>
+    <div class="row"><div class="field"><label>Header fill</label><input type="color" value="${toHex(e.headerBg)}" oninput="liveSet('headerBg',this.value)"></div><div class="field"><label>Header text</label><input type="color" value="${toHex(e.headerColor)}" oninput="liveSet('headerColor',this.value)"></div></div>
+    <div class="row"><div class="field"><label>Cell fill</label><input type="color" value="${toHex(e.cellBg)}" oninput="liveSet('cellBg',this.value)"></div><div class="field"><label>Text color</label><input type="color" value="${toHex(e.textColor)}" oninput="liveSet('textColor',this.value)"></div></div>
+    <div class="row"><div class="field"><label>Border color</label><input type="color" value="${toHex(e.borderColor)}" oninput="liveSet('borderColor',this.value)"></div><div class="field"><label>Font size</label><input type="number" min="8" max="48" value="${e.fontSize}" oninput="liveSet('fontSize',+this.value)"></div></div>
+    <div class="field"><label>Border width</label><input type="number" min="0" max="8" value="${e.borderWidth}" oninput="liveSet('borderWidth',+this.value)"></div>
+  </div></details>`;
   const anim=ensureAnim(e);
   const hasAnim=anim.type!=='none';
   html+=`<details class="acc" open><summary>Animation${hasAnim?' <span style="font-weight:400;color:var(--accent-ink)">· '+(ANIM_DEFS.find(a=>a[0]===anim.type)||[,anim.type])[1]+'</span>':''}</summary><div class="acc-body">
@@ -1801,7 +1954,7 @@ function updateLayersPanel(){
   if(!els.length){box.innerHTML='<div class="empty-panel">No elements on this slide yet. Use Insert to add text, images, shapes, icons, or charts.</div>';return}
   box.innerHTML=`<div class="layer-list">`+els.slice().reverse().map(e=>{
     const label=elementLabel(e);
-    const icon=e.type==="text"?"🗛":e.type==="image"?"🖼":e.type==="icon"?"✦":e.type==="chart"?"📊":"◆";
+    const icon=e.type==="text"?"🗛":e.type==="image"?"🖼":e.type==="icon"?"✦":e.type==="chart"?"📊":e.type==="table"?"⊞":"◆";
     const hasAnim=e.anim&&e.anim.type!=='none';
     return `<div class="layer-row ${selected===e.id?'active':''}" onclick="selectFromLayer('${e.id}')">
       <span>${icon}</span><span class="lname">${esc(label)}</span>
@@ -1879,6 +2032,17 @@ async function exportPPTX(){
         }catch(err){st=pptx.ShapeType.rect}
         ps.addShape(st,{x,y,w,h,fill:e.shape==="line"?{color:toHex(e.stroke).replace("#","") ,transparency:100}:{color:toHex(e.fill).replace("#",""),transparency:Math.round((1-(e.opacity??1))*100)},line:{color:toHex(e.stroke).replace("#",""),width:e.strokeWidth},rotate:e.rotation||0});
       }
+      if(e.type==="table"){
+        try{
+          const rowsData=e.cells.map((row,ri)=>row.map((val,ci)=>{
+            const isHeader=e.headerRow&&ri===0;
+            const bg=isHeader?e.headerBg:(e.useAltRows&&ri%2===1?e.altRowBg:e.cellBg);
+            const color=isHeader?e.headerColor:e.textColor;
+            return {text:val,options:{fill:{color:toHex(bg).replace("#","")},color:toHex(color).replace("#",""),bold:isHeader,fontSize:Math.max(6,e.fontSize*0.72),border:{type:"solid",color:toHex(e.borderColor).replace("#",""),pt:e.borderWidth}}};
+          }));
+          ps.addTable(rowsData,{x,y,w,h});
+        }catch(err){}
+      }
     });
   });
   await pptx.writeFile({fileName:(deck.name||"presentation")+".pptx"});toast("Exported "+(deck.name||"presentation")+".pptx");
@@ -1914,6 +2078,7 @@ function presentElement(p,e){
   if(e.type==="shape")styleShapeDiv(d,e);
   if(e.type==="icon")d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`;
   if(e.type==="chart")d.innerHTML=renderChartSVG(e);
+  if(e.type==="table")d.innerHTML=renderTableHTML(e,false);
   if(e.anim&&e.anim.type&&e.anim.type!=='none'&&ANIM_CLASS[e.anim.type]){
     d.style.setProperty('--endOp',e.opacity??1);
     d.style.opacity=0;
