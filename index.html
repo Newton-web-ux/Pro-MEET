@@ -1389,12 +1389,11 @@ function renderElement(c,e){
     if(editingId&&editingId!==e.id)editingId=null;
     selected=e.id;renderCanvas();updateFormatPanel();updateLayersPanel();
   };
- d.ondblclick=ev=>{
-  ev.stopPropagation();
-  if(editingId===e.id)return; // already editing — let native text selection behave normally
-  if(e.type==="text"&&!e.locked)enterTextEdit(e.id,ev);
-  if(e.type==="table"&&!e.locked)enterTableEdit(e.id,ev);
-};
+  d.ondblclick=ev=>{
+    ev.stopPropagation();
+    if(e.type==="text"&&!e.locked)enterTextEdit(e.id,ev);
+    if(e.type==="table"&&!e.locked)enterTableEdit(e.id,ev);
+  };
   if(!e.locked&&!isEditing)makeDrag(d,e);
   if(selected===e.id&&!isEditing){
     d.classList.add("selected");
@@ -1481,16 +1480,19 @@ function makeDrag(d,e){
       }
       moveDrag(mv);
     }
-function onUp(up){
-  document.removeEventListener("mousemove",onMove);
-  document.removeEventListener("mouseup",onUp);
-  if(moved){drag=null;clearGuides();renderThumbs();updateFormatPanel();scheduleSave();return}
-  if(wasSelected&&!e.locked&&(e.type==="text"||e.type==="table")){
-    if(e.type==="text")enterTextEdit(e.id,up);
-    else enterTableEdit(e.id,up);
-  }else{
-    if(editingId&&editingId!==e.id)editingId=null;
-    selected=e.id;renderCanvas();updateFormatPanel();updateLayersPanel();
+    function onUp(up){
+      document.removeEventListener("mousemove",onMove);
+      document.removeEventListener("mouseup",onUp);
+      if(moved){drag=null;clearGuides();renderThumbs();updateFormatPanel();scheduleSave();return}
+      if(e.type==="text"&&wasSelected&&!e.locked){
+        enterTextEdit(e.id,up);
+      }else{
+        if(editingId&&editingId!==e.id)editingId=null;
+        selected=e.id;renderCanvas();updateFormatPanel();updateLayersPanel();
+      }
+    }
+    document.addEventListener("mousemove",onMove);
+    document.addEventListener("mouseup",onUp);
   }
 }
 function guideTargetsFor(e){
