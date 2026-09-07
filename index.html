@@ -124,6 +124,13 @@ button{cursor:pointer}
 .theme-swatchbar{height:40px;display:flex}
 .theme-swatchbar i{flex:1}
 .theme-card span{display:block;font-size:10px;font-weight:600;padding:4px 6px}
+.size-card{width:76px;border:1px solid var(--line);border-radius:9px;background:#fff;flex:none;text-align:center;padding:8px 4px 7px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.size-card:hover{background:var(--paper-2);border-color:#D9DAE6}
+.size-card.active{outline:2px solid var(--accent);border-color:var(--accent)}
+.size-card i{display:block;background:var(--paper-2);border:1.5px solid var(--muted-2);border-radius:2px}
+.size-card b{display:block;font-size:10.5px;font-weight:700}
+.size-card span{display:block;font-size:9px;color:var(--muted)}
+.orient-btn.active{background:var(--accent-soft);border-color:#C9CBFB;color:var(--accent-ink)}
 .trans-card{width:64px;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--paper-2);flex:none;font-size:10.5px;font-weight:600;color:var(--muted)}
 .trans-card.active{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
 .trans-card:disabled{opacity:.4;cursor:default}
@@ -457,9 +464,24 @@ details.acc[open] summary::after{transform:rotate(180deg)}
 
     <!-- DESIGN -->
     <div class="ribbon-panel" data-panel="design">
-      <div class="rgroup" style="border-right:none">
+      <div class="rgroup">
         <div class="rgroup-row" id="themeStrip"></div>
         <div class="rgroup-label">Theme — click to apply to whole deck</div>
+      </div>
+      <div class="rgroup">
+        <div class="rgroup-row" id="sizeStrip"></div>
+        <div class="rgroup-label">Page size</div>
+      </div>
+      <div class="rgroup" style="border-right:none">
+        <div class="rgroup-row">
+          <button class="rbtn orient-btn" id="orientLandscape" title="Landscape" onclick="setOrientation(true)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="1.5"/></svg>
+          </button>
+          <button class="rbtn orient-btn" id="orientPortrait" title="Portrait" onclick="setOrientation(false)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="3" width="12" height="18" rx="1.5"/></svg>
+          </button>
+        </div>
+        <div class="rgroup-label">Orientation</div>
       </div>
     </div>
 
@@ -662,8 +684,53 @@ const THEMES=[
  {id:'forest',   name:'Forest',    accent:'#166534', ink:'#0B1F14', bg:'#FFFFFF', soft:'#ECFDF3', muted:'#5B7566', display:'Inter'},
  {id:'midnight', name:'Midnight',  accent:'#8B7CF8', ink:'#F5F3FF', bg:'#181523', soft:'#241F3B', muted:'#A79FD6', display:'Space Grotesk', dark:true},
  {id:'amber',    name:'Amber',     accent:'#B45309', ink:'#2A1B05', bg:'#FFFDF7', soft:'#FEF3E2', muted:'#8C704A', display:'Inter'},
+ {id:'rose',     name:'Rose',      accent:'#E11D48', ink:'#3F0E1D', bg:'#FFFFFF', soft:'#FFE4E9', muted:'#A9677A', display:'Space Grotesk'},
+ {id:'teal',     name:'Teal',      accent:'#0D9488', ink:'#042F2C', bg:'#FFFFFF', soft:'#E6FFFA', muted:'#4B8079', display:'Inter'},
+ {id:'ocean',    name:'Ocean',     accent:'#0369A1', ink:'#082F49', bg:'#F8FBFF', soft:'#E0F2FE', muted:'#5B7C93', display:'Space Grotesk'},
+ {id:'sunset',   name:'Sunset',    accent:'#EA580C', ink:'#431407', bg:'#FFFBF5', soft:'#FFEDD5', muted:'#A9765A', display:'Space Grotesk'},
+ {id:'mono',     name:'Mono',      accent:'#18181B', ink:'#09090B', bg:'#FFFFFF', soft:'#F4F4F5', muted:'#71717A', display:'Inter'},
+ {id:'lavender', name:'Lavender',  accent:'#7C3AED', ink:'#2E1065', bg:'#FDFBFF', soft:'#F3E8FF', muted:'#8B79A8', display:'Space Grotesk'},
+ {id:'emerald',  name:'Emerald',   accent:'#059669', ink:'#022C22', bg:'#FFFFFF', soft:'#D1FAE5', muted:'#5C8B7B', display:'Inter'},
+ {id:'crimson',  name:'Crimson',   accent:'#FB7185', ink:'#FBE9EE', bg:'#1C0A10', soft:'#3A1420', muted:'#C79AA6', display:'Space Grotesk', dark:true},
+ {id:'sand',     name:'Sand',      accent:'#A16207', ink:'#292008', bg:'#FFFDF6', soft:'#FEF3C7', muted:'#93805A', display:'Inter'},
+ {id:'graphite', name:'Graphite',  accent:'#38BDF8', ink:'#E2E8F0', bg:'#0F172A', soft:'#1E293B', muted:'#94A3B8', display:'Space Grotesk', dark:true},
 ];
 function themeOf(id){return THEMES.find(t=>t.id===id)||THEMES[0]}
+
+/* ---- Page sizes & orientation ----
+   Sizes are stored in inches (landscape orientation, w>=h); the deck's
+   `landscape` flag (default true) swaps w/h for portrait use. Used to size
+   the editing canvas, every thumbnail, and the exported .pptx layout. */
+const SLIDE_SIZES=[
+ {id:'widescreen', name:'Widescreen', sub:'16:9',        w:13.333, h:7.5},
+ {id:'standard',   name:'Standard',   sub:'4:3',         w:10,     h:7.5},
+ {id:'a4',         name:'A4',         sub:'11.69×8.27"', w:11.69,  h:8.27},
+ {id:'letter',     name:'Letter',     sub:'11×8.5"',      w:11,     h:8.5},
+ {id:'square',     name:'Square',     sub:'1:1',         w:10,     h:10},
+ {id:'social',     name:'Social',     sub:'4:5',         w:8,      h:10},
+];
+function sizeOf(id){return SLIDE_SIZES.find(s=>s.id===id)||SLIDE_SIZES[0]}
+function currentPageSize(){
+  const base=sizeOf(deck?deck.sizeId:'widescreen');
+  const landscape=deck?deck.landscape!==false:true;
+  return landscape?{w:base.w,h:base.h}:{w:base.h,h:base.w};
+}
+function pageAspect(sizeId,landscape){
+  const base=sizeOf(sizeId);
+  const w=landscape===false?base.h:base.w, h=landscape===false?base.w:base.h;
+  return w+" / "+h;
+}
+function fitCanvasToStage(){
+  const stage=$("stage"),canvas=$("canvas");
+  if(!stage||!canvas||!deck)return;
+  const {w,h}=currentPageSize();
+  const availW=Math.max(120,stage.clientWidth-68), availH=Math.max(90,stage.clientHeight-68);
+  let cw=availW, ch=cw*h/w;
+  if(ch>availH){ch=availH;cw=ch*w/h}
+  canvas.style.width=cw+"px";
+  canvas.style.height=ch+"px";
+}
+window.addEventListener('resize',()=>{if($("editorView").style.display!=="none")fitCanvasToStage()});
 
 let library=[];               // dashboard index: {id,name,updated,slideCount,theme,preview}
 let deck=null;                // currently open deck (full)
@@ -746,8 +813,8 @@ function defaultSlide(layout,theme){
     textEl("First important point\nSecond important point\nThird important point\nFourth important point",10,25,80,55,20,{bullet:true})
   ]};
 }
-function newDeckObj(name,layout,theme){
-  return {id:did(),name:name||"Untitled presentation",theme:theme||"indigo",created:Date.now(),updated:Date.now(),
+function newDeckObj(name,layout,theme,sizeId,landscape){
+  return {id:did(),name:name||"Untitled presentation",theme:theme||"indigo",sizeId:sizeId||"widescreen",landscape:landscape!==false,created:Date.now(),updated:Date.now(),
     slides:[defaultSlide("title",theme),defaultSlide(layout||"content",theme)]};
 }
 
@@ -785,6 +852,7 @@ async function seedStarterDeck(){
 function indexEntryFrom(d){
   const first=d.slides[0]||{bg:'#fff',elements:[]};
   return {id:d.id,name:d.name,updated:d.updated,slideCount:d.slides.length,theme:d.theme,
+    sizeId:d.sizeId||'widescreen',landscape:d.landscape!==false,
     preview:{bg:first.bg,elements:(first.elements||[]).map(e=>{
       if(e.type==='image')return{type:'image',x:e.x,y:e.y,w:e.w,h:e.h,rotation:e.rotation,opacity:e.opacity};
       const c=clone(e); return c;
@@ -864,10 +932,13 @@ async function openDeck(id){
     const r=await window.storage.get('deck-'+id,false);
     deck=r?JSON.parse(r.value):newDeckObj();
   }catch(e){toast("Could not open presentation");return}
+  if(!deck.sizeId)deck.sizeId="widescreen";
+  if(deck.landscape===undefined)deck.landscape=true;
   deck.slides.forEach(s=>{if(s.notes===undefined)s.notes="";if(s.transition===undefined)s.transition="fade";
     s.elements.forEach(el=>{if(el.locked===undefined)el.locked=false;if(el.hidden===undefined)el.hidden=false;if(!el.anim)el.anim=defaultAnim();})});
   current=0;selected=null;undoStack=[];redoStack=[];zoomLevel=1;notesOpen=false;
   showEditor();render();
+  requestAnimationFrame(fitCanvasToStage);
 }
 function renderDashboard(){
   const q=($("dashSearch").value||"").toLowerCase().trim();
@@ -889,7 +960,7 @@ function renderDashboard(){
         <button class="deck-menu-btn" onclick="event.stopPropagation();toggleDeckMenu('${entry.id}')">⋯</button>
       </div>`;
     grid.appendChild(card);
-    renderMiniSlide($("thumb-"+entry.id),entry.preview,true);
+    renderMiniSlide($("thumb-"+entry.id),entry.preview,true,pageAspect(entry.sizeId,entry.landscape));
   });
 }
 function toggleDeckMenu(id){
@@ -944,9 +1015,10 @@ function importProject(){
 }
 
 /* mini slide renderer — used by dashboard cards, sidebar thumbs, sorter */
-function renderMiniSlide(container,slide,isDark){
+function renderMiniSlide(container,slide,isDark,aspect){
   if(!container)return;
   container.innerHTML="";container.style.background=slide.bg;container.style.position="relative";
+  if(aspect)container.style.aspectRatio=aspect;
   (slide.elements||[]).forEach(e=>{
     if(e.hidden)return;
     const d=document.createElement("div");d.className="mini-el";
@@ -1178,16 +1250,18 @@ function render(){
   $("notesToggle").classList.toggle("active",notesOpen);
   $("gridToggle").classList.toggle("active",showGrid);
   $("guideToggle").classList.toggle("active",showGuides);
-  buildThemeStrip();buildTransStrip();buildAnimPanel();
+  buildThemeStrip();buildSizeStrip();buildTransStrip();buildAnimPanel();
+  fitCanvasToStage();
 }
 function renderThumbs(){
   const box=$("thumbs");box.innerHTML="";
+  const aspect=pageAspect(deck.sizeId,deck.landscape);
   deck.slides.forEach((s,i)=>{
     const wrap=document.createElement("div");wrap.className="thumbwrap";
     const num=document.createElement("div");num.className="thumb-num";num.textContent=i+1;
     const th=document.createElement("div");th.className="thumb"+(i===current?" active":"");
     th.onclick=()=>{current=i;selected=null;render()};
-    renderMiniSlide(th,s);
+    renderMiniSlide(th,s,false,aspect);
     const menu=document.createElement("div");menu.className="thumbmenu";
     const dup=document.createElement("button");dup.textContent="⧉";dup.title="Duplicate";dup.onclick=ev=>{ev.stopPropagation();duplicateSlide(i)};
     const del=document.createElement("button");del.textContent="×";del.title="Delete";del.onclick=ev=>{ev.stopPropagation();deleteSlide(i)};
@@ -1607,6 +1681,31 @@ function buildTransStrip(){
   const cur=deck?deck.slides[current].transition:"fade";
   $("transStrip").innerHTML=Object.keys(TRANS_LABELS).map(k=>`<button class="trans-card ${cur===k?'active':''}" onclick="setTransition('${k}')">${TRANS_LABELS[k]}</button>`).join("");
 }
+function buildSizeStrip(){
+  if(!$("sizeStrip"))return;
+  const curId=deck?deck.sizeId:'widescreen';
+  const landscape=deck?deck.landscape!==false:true;
+  $("sizeStrip").innerHTML=SLIDE_SIZES.map(s=>{
+    const w=landscape?s.w:s.h, h=landscape?s.h:s.w;
+    const bw=Math.round(30*(w/Math.max(w,h))), bh=Math.round(30*(h/Math.max(w,h)));
+    return `<button class="size-card ${curId===s.id?'active':''}" onclick="setPageSize('${s.id}')">
+      <i style="width:${bw}px;height:${bh}px"></i>
+      <b>${s.name}</b><span>${s.sub}</span>
+    </button>`;
+  }).join("");
+  if($("orientLandscape"))$("orientLandscape").classList.toggle("active",landscape);
+  if($("orientPortrait"))$("orientPortrait").classList.toggle("active",!landscape);
+}
+function setPageSize(id){
+  if(!deck)return;
+  snapshot();deck.sizeId=id;render();scheduleSave();
+  requestAnimationFrame(fitCanvasToStage);
+}
+function setOrientation(isLandscape){
+  if(!deck||deck.landscape===isLandscape)return;
+  snapshot();deck.landscape=isLandscape;render();scheduleSave();
+  requestAnimationFrame(fitCanvasToStage);
+}
 function updateSlidePanel(){
   const s=deck.slides[current];
   $("inspSlide").innerHTML=`
@@ -1614,6 +1713,7 @@ function updateSlidePanel(){
       <div class="field"><label>Slide color</label><input id="slideBgInput" type="color" value="${toHex(s.bg)}" onchange="setSlideBg(this.value)"></div>
     </div></details>
     <details class="acc"><summary>Transition</summary><div class="acc-body" style="font-size:12px;color:var(--muted)">Set on the Transitions tab in the ribbon. Current: <b style="color:var(--ink)">${s.transition||'fade'}</b></div></details>
+    <details class="acc"><summary>Page size</summary><div class="acc-body" style="font-size:12px;color:var(--muted)">Set on the Design tab in the ribbon. Current: <b style="color:var(--ink)">${sizeOf(deck.sizeId).name} · ${deck.landscape!==false?'Landscape':'Portrait'}</b></div></details>
     <details class="acc"><summary>Notes</summary><div class="acc-body" style="font-size:12px;color:var(--muted)">Speaker notes appear in the panel below the canvas (View → Notes) and in Presenter mode.</div></details>`;
 }
 function toHex(c){if(!c)return"#ffffff";if(c[0]==="#")return c;const d=document.createElement("div");d.style.color=c;document.body.appendChild(d);const rgb=getComputedStyle(d).color;document.body.removeChild(d);const m=rgb.match(/\d+/g);if(!m)return"#ffffff";return"#"+m.slice(0,3).map(x=>(+x).toString(16).padStart(2,"0")).join("")}
@@ -1723,12 +1823,13 @@ function toggleNotes(){notesOpen=!notesOpen;render()}
 
 function openSorter(){
   const box=$("sorterGrid");box.innerHTML="";
+  const aspect=pageAspect(deck.sizeId,deck.landscape);
   deck.slides.forEach((s,i)=>{
     const card=document.createElement("div");card.className="sorter-card"+(i===current?" active":"");
     card.onclick=()=>{current=i;closeSorter();render()};
     const th=document.createElement("div");th.className="sorter-thumb";
     card.appendChild(th);const num=document.createElement("div");num.className="sorter-num";num.textContent="Slide "+(i+1);card.appendChild(num);
-    box.appendChild(card);renderMiniSlide(th,s);
+    box.appendChild(card);renderMiniSlide(th,s,false,aspect);
   });
   $("sorter").classList.add("show");
 }
@@ -1737,13 +1838,17 @@ function closeSorter(){$("sorter").classList.remove("show")}
 /* =================== EXPORT =================== */
 async function exportPPTX(){
   if(typeof PptxGenJS==="undefined")return toast("PPTX library could not load");
-  const pptx=new PptxGenJS();pptx.layout="LAYOUT_WIDE";pptx.author="SlateDeck";pptx.title=deck.name;
+  const pptx=new PptxGenJS();
+  const {w:pageW,h:pageH}=currentPageSize();
+  pptx.defineLayout({name:"SLATEDECK_CUSTOM",width:pageW,height:pageH});
+  pptx.layout="SLATEDECK_CUSTOM";
+  pptx.author="SlateDeck";pptx.title=deck.name;
   deck.slides.forEach(s=>{
     let ps=pptx.addSlide();ps.background={color:toHex(s.bg).replace("#","")};
     if(s.notes)ps.addNotes(s.notes);
     s.elements.forEach(e=>{
       if(e.hidden)return;
-      let x=e.x/12.5,y=e.y/5.625,w=e.w/12.5,h=e.h/5.625;
+      let x=e.x/100*pageW,y=e.y/100*pageH,w=e.w/100*pageW,h=e.h/100*pageH;
       if(e.type==="text")ps.addText(e.text,{x,y,w,h,fontFace:e.fontFamily,fontSize:e.fontSize*0.72,color:toHex(e.color).replace("#",""),bold:e.bold,italic:e.italic,underline:e.underline?"sng":undefined,align:e.align,margin:.04,fit:"shrink",transparency:Math.round((1-(e.opacity??1))*100),rotate:e.rotation||0,bullet:e.bullet?true:false});
       if(e.type==="image"&&e.src)ps.addImage({data:e.src,x,y,w,h,transparency:Math.round((1-(e.opacity??1))*100),rotate:e.rotation||0});
       if(e.type==="icon"){
