@@ -1391,6 +1391,7 @@ function renderElement(c,e){
   };
   d.ondblclick=ev=>{
     ev.stopPropagation();
+    if(editingId===e.id)return; // already editing this element — let native text/word selection behave normally
     if(e.type==="text"&&!e.locked)enterTextEdit(e.id,ev);
     if(e.type==="table"&&!e.locked)enterTableEdit(e.id,ev);
   };
@@ -1461,8 +1462,12 @@ function selectAllInNode(node){
   const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
 }
 
-/* drag with smart guides — plain click (no movement) selects or, on an already-selected
-   text box, enters edit mode; only real movement past a small threshold starts a drag */
+/* drag with smart guides — plain click (no movement) selects, or, on an
+   already-selected text box or table, enters edit mode. Only real movement
+   past a small threshold starts a drag. Selection-then-click is used to
+   enter edit mode (rather than relying on the browser's native dblclick)
+   because a re-render replaces the element's DOM node between clicks, which
+   would otherwise break the browser's own double-click detection. */
 function makeDrag(d,e){
   d.onmousedown=ev=>{
     if(ev.target.classList.contains("handle"))return;
@@ -1484,8 +1489,9 @@ function makeDrag(d,e){
       document.removeEventListener("mousemove",onMove);
       document.removeEventListener("mouseup",onUp);
       if(moved){drag=null;clearGuides();renderThumbs();updateFormatPanel();scheduleSave();return}
-      if(e.type==="text"&&wasSelected&&!e.locked){
-        enterTextEdit(e.id,up);
+      if(wasSelected&&!e.locked&&(e.type==="text"||e.type==="table")){
+        if(e.type==="text")enterTextEdit(e.id,up);
+        else enterTableEdit(e.id,up);
       }else{
         if(editingId&&editingId!==e.id)editingId=null;
         selected=e.id;renderCanvas();updateFormatPanel();updateLayersPanel();
