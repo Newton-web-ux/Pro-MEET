@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <style>
 :root{
   --ink:#12141C; --canvas:#F1F2F6; --paper:#FFFFFF; --paper-2:#F7F8FB; --line:#E3E5EC; --line-2:#EDEEF3;
@@ -175,6 +177,8 @@ button{cursor:pointer}
 .table-cell{display:flex;align-items:center;padding:4px 7px;overflow:hidden;box-sizing:border-box;outline:none;line-height:1.25;word-break:break-word}
 .element.editing.table-el{cursor:default}
 .element.editing .table-cell{cursor:text}
+.math-el{cursor:move;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.math-el .katex{white-space:nowrap}
 .handle{position:absolute;width:9px;height:9px;background:#fff;border:1.5px solid var(--accent);border-radius:2px;z-index:3}
 .h-nw{left:-5px;top:-5px;cursor:nwse-resize}.h-ne{right:-5px;top:-5px;cursor:nesw-resize}
 .h-sw{left:-5px;bottom:-5px;cursor:nesw-resize}.h-se{right:-5px;bottom:-5px;cursor:nwse-resize}
@@ -235,6 +239,16 @@ details.acc[open] summary::after{transform:rotate(180deg)}
 .chart-pick:hover{background:var(--paper-2);border-color:#D9DAE6}
 .chart-pick svg{width:34px;height:34px}
 .modal-close{position:absolute;top:16px;right:16px}
+.symgrid{display:grid;grid-template-columns:repeat(8,1fr);gap:7px;max-height:220px;overflow:auto;padding:2px}
+.sym-pick{border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px 3px;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px}
+.sym-pick:hover{background:var(--accent-soft);border-color:#C9CBFB}
+.sym-pick .katex{font-size:15px}
+.sym-pick span{font-size:8.5px;color:var(--muted);text-align:center;line-height:1.1}
+.mathpreviewbox{border:1px solid var(--line);border-radius:10px;background:var(--paper-2);padding:18px;min-height:70px;display:flex;align-items:center;justify-content:center;overflow:auto}
+.mathpreviewbox .katex-error{color:var(--danger);font-size:12px;font-family:monospace}
+.symcat-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.symcat-tabs button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:600;color:var(--muted)}
+.symcat-tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
 /* Slide sorter overlay */
 .sorter{position:fixed;inset:0;background:#12141cf2;z-index:60;display:none;flex-direction:column}
@@ -461,8 +475,9 @@ details.acc[open] summary::after{transform:rotate(180deg)}
         <div class="rgroup-row">
           <button class="rbtn-lg" onclick="openIconPicker()">✦<span>Icon</span></button>
           <button class="rbtn-lg" onclick="openChartPicker()">📊<span>Chart</span></button>
+          <button class="rbtn-lg" onclick="openMathEditor()">∑<span>Math</span></button>
         </div>
-        <div class="rgroup-label">Icons &amp; Charts</div>
+        <div class="rgroup-label">Icons, Charts &amp; Math</div>
       </div>
       <div class="rgroup" style="border-right:none">
         <div class="rgroup-row">
@@ -636,6 +651,28 @@ details.acc[open] summary::after{transform:rotate(180deg)}
   </div>
 </div>
 
+<!-- Math equation editor modal -->
+<div id="mathModal" class="modal">
+  <div class="modalbox" style="position:relative;width:min(760px,92vw)">
+    <button class="ed-iconbtn modal-close" style="color:var(--ink)" onclick="closeMathEditor()">✕</button>
+    <h2 id="mathModalTitle">Insert a math equation</h2>
+    <p class="sub">Type LaTeX, click symbols to insert them, and edit freely — the preview updates live.</p>
+    <div class="symcat-tabs" id="symCatTabs"></div>
+    <div class="symgrid" id="mathSymGrid"></div>
+    <div class="field" style="margin-top:12px"><label>LaTeX source</label><textarea id="mathLatexInput" style="min-height:74px;font-family:monospace" oninput="updateMathPreview()"></textarea></div>
+    <div class="field"><label>Preview</label></div>
+    <div class="mathpreviewbox" id="mathPreviewBox"></div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Color</label><input id="mathColorInput" type="color" value="#12141C" oninput="updateMathPreview()"></div>
+      <div class="field"><label>Size (px)</label><input id="mathSizeInput" type="number" min="12" max="120" value="32" oninput="updateMathPreview()"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+      <button class="pill-btn" onclick="closeMathEditor()">Cancel</button>
+      <button class="pill-btn primary" id="mathInsertBtn" onclick="commitMathEditor()">Insert equation</button>
+    </div>
+  </div>
+</div>
+
 <!-- Slide sorter -->
 <div id="sorter" class="sorter">
   <div class="sorter-top">
@@ -799,6 +836,10 @@ function tableEl(x,y,w,h,rows,cols,theme){
     textColor:t.ink,fontSize:14,
     x,y,w,h,opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()};
 }
+function mathEl(latex,x,y,w,h,color,fontSize){
+  return {id:uid(),type:"math",latex:latex||"e^{i\\pi}+1=0",color:color||"#12141C",fontSize:fontSize||32,
+    x,y,w,h,opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()};
+}
 const CHART_PALETTE=["#4F46E5","#F59E0B","#10B981","#EF4444","#0EA5E9","#8B5CF6","#EC4899","#84CC16"];
 /* stroke-only 24x24 icon paths — inner markup only, wrapped with an <svg> at render time */
 const ICONS={
@@ -829,6 +870,118 @@ const ICONS={
  rocket:'<path d="M12 2c3 2 5 6 5 10 0 2-1 4-2 5l-3 3-3-3c-1-1-2-3-2-5 0-4 2-8 5-10z"/><circle cx="12" cy="10" r="2"/><path d="M8 16l-3 5M16 16l3 5"/>'
 };
 const ICON_LABELS={home:"Home",user:"User",star:"Star",heart:"Heart",check:"Check",close:"Close",mail:"Mail",phone:"Phone",gear:"Settings",bell:"Bell",flag:"Flag",bulb:"Idea",camera:"Camera",calendar:"Calendar",clock:"Clock",arrowRight:"Arrow",lock:"Lock",cloudIcon:"Cloud",sun:"Sun",moon:"Moon",thumbsUp:"Like",pin:"Location",search:"Search",target:"Target",rocket:"Rocket"};
+
+/* =================== MATH / LATEX SYMBOLS =================== */
+const MATH_SYMBOL_CATEGORIES=[
+ ["Basic",[
+   ["+","+"],["-","-"],["\\times","\\times"],["\\div","\\div"],["\\pm","\\pm"],["\\mp","\\mp"],
+   ["=","="],["\\neq","\\neq"],["\\approx","\\approx"],["\\equiv","\\equiv"],["<","<"],[">",">"],
+   ["\\leq","\\leq"],["\\geq","\\geq"],["\\cdot","\\cdot"],["\\frac{a}{b}","\\frac{a}{b}"],
+   ["\\sqrt{x}","\\sqrt{x}"],["\\sqrt[n]{x}","\\sqrt[n]{x}"],["x^{n}","x^{n}"],["x_{n}","x_{n}"],
+   ["\\%","\\%"],["\\infty","\\infty"],["\\propto","\\propto"],["\\therefore","\\therefore"]
+ ]],
+ ["Greek",[
+   ["\\alpha","\\alpha"],["\\beta","\\beta"],["\\gamma","\\gamma"],["\\Gamma","\\Gamma"],
+   ["\\delta","\\delta"],["\\Delta","\\Delta"],["\\epsilon","\\epsilon"],["\\zeta","\\zeta"],
+   ["\\eta","\\eta"],["\\theta","\\theta"],["\\Theta","\\Theta"],["\\lambda","\\lambda"],
+   ["\\Lambda","\\Lambda"],["\\mu","\\mu"],["\\nu","\\nu"],["\\pi","\\pi"],["\\Pi","\\Pi"],
+   ["\\rho","\\rho"],["\\sigma","\\sigma"],["\\Sigma","\\Sigma"],["\\tau","\\tau"],
+   ["\\phi","\\phi"],["\\Phi","\\Phi"],["\\chi","\\chi"],["\\psi","\\psi"],["\\omega","\\omega"],["\\Omega","\\Omega"]
+ ]],
+ ["Calculus",[
+   ["\\sum_{i=1}^{n}","\\sum_{i=1}^{n}"],["\\prod_{i=1}^{n}","\\prod_{i=1}^{n}"],
+   ["\\int","\\int"],["\\int_{a}^{b}","\\int_{a}^{b}"],["\\oint","\\oint"],
+   ["\\iint","\\iint"],["\\lim_{x\\to\\infty}","\\lim_{x\\to\\infty}"],
+   ["\\frac{d}{dx}","\\frac{d}{dx}"],["\\frac{\\partial}{\\partial x}","\\frac{\\partial}{\\partial x}"],
+   ["\\nabla","\\nabla"],["\\Delta x","\\Delta x"],["'","'"],["\\prime\\prime","\\prime\\prime"]
+ ]],
+ ["Sets & Logic",[
+   ["\\in","\\in"],["\\notin","\\notin"],["\\subset","\\subset"],["\\subseteq","\\subseteq"],
+   ["\\cup","\\cup"],["\\cap","\\cap"],["\\emptyset","\\emptyset"],["\\forall","\\forall"],
+   ["\\exists","\\exists"],["\\neg","\\neg"],["\\land","\\land"],["\\lor","\\lor"],
+   ["\\Rightarrow","\\Rightarrow"],["\\Leftrightarrow","\\Leftrightarrow"],
+   ["\\mathbb{R}","\\mathbb{R}"],["\\mathbb{N}","\\mathbb{N}"],["\\mathbb{Z}","\\mathbb{Z}"],["\\mathbb{Q}","\\mathbb{Q}"]
+ ]],
+ ["Arrows",[
+   ["\\to","\\to"],["\\rightarrow","\\rightarrow"],["\\leftarrow","\\leftarrow"],
+   ["\\leftrightarrow","\\leftrightarrow"],["\\uparrow","\\uparrow"],["\\downarrow","\\downarrow"],
+   ["\\mapsto","\\mapsto"],["\\Rightarrow","\\Rightarrow"],["\\Leftarrow","\\Leftarrow"],["\\Leftrightarrow","\\Leftrightarrow"]
+ ]],
+ ["Matrices",[
+   ["\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}","2×2 (parens)"],
+   ["\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}","2×2 (brackets)"],
+   ["\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}","Determinant"],
+   ["\\vec{v}","Vector"],["\\hat{x}","Hat"],["\\overline{AB}","Overline"],["\\underline{x}","Underline"]
+ ]],
+ ["Functions",[
+   ["\\sin(x)","\\sin(x)"],["\\cos(x)","\\cos(x)"],["\\tan(x)","\\tan(x)"],
+   ["\\log(x)","\\log(x)"],["\\ln(x)","\\ln(x)"],["e^{x}","e^{x}"],
+   ["\\binom{n}{k}","\\binom{n}{k}"],["|x|","|x|"],["\\lceil x \\rceil","\\lceil x \\rceil"],["\\lfloor x \\rfloor","\\lfloor x \\rfloor"]
+ ]]
+];
+function katexRenderSafe(latex,displayMode){
+  try{
+    if(typeof katex==="undefined")return `<span style="font-family:monospace">${esc(latex)}</span>`;
+    return katex.renderToString(latex||"",{throwOnError:true,displayMode:!!displayMode});
+  }catch(err){
+    return `<span class="katex-error">Invalid LaTeX: ${esc(err.message||"parse error")}</span>`;
+  }
+}
+let mathEditTargetId=null, mathSymCat=0;
+function buildSymCatTabs(){
+  $("symCatTabs").innerHTML=MATH_SYMBOL_CATEGORIES.map(([name],i)=>
+    `<button class="${i===mathSymCat?'active':''}" onclick="switchSymCat(${i})">${name}</button>`).join("");
+}
+function switchSymCat(i){mathSymCat=i;buildSymCatTabs();buildSymGrid()}
+function buildSymGrid(){
+  const [,syms]=MATH_SYMBOL_CATEGORIES[mathSymCat];
+  $("mathSymGrid").innerHTML=syms.map(([code,label])=>
+    `<button class="sym-pick" title="${esc(code)}" onclick="insertMathSymbol('${code.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${katexRenderSafe(code,false)}<span>${esc(label.length>10?label.slice(0,9)+'…':label)}</span></button>`
+  ).join("");
+}
+function insertMathSymbol(code){
+  const ta=$("mathLatexInput");
+  const start=ta.selectionStart??ta.value.length, end=ta.selectionEnd??ta.value.length;
+  ta.value=ta.value.slice(0,start)+code+ta.value.slice(end);
+  ta.focus();
+  const pos=start+code.length;
+  ta.setSelectionRange(pos,pos);
+  updateMathPreview();
+}
+function updateMathPreview(){
+  const latex=$("mathLatexInput").value;
+  const color=$("mathColorInput").value, size=+$("mathSizeInput").value||32;
+  const box=$("mathPreviewBox");
+  box.innerHTML=katexRenderSafe(latex,true);
+  box.style.color=color;box.style.fontSize=size+"px";
+}
+function openMathEditor(elementId){
+  mathEditTargetId=elementId||null;
+  const existing=elementId?deck.slides[current].elements.find(x=>x.id===elementId):null;
+  $("mathModalTitle").textContent=existing?"Edit math equation":"Insert a math equation";
+  $("mathInsertBtn").textContent=existing?"Update equation":"Insert equation";
+  $("mathLatexInput").value=existing?existing.latex:"e^{i\\pi}+1=0";
+  $("mathColorInput").value=existing?toHex(existing.color):toHex(themeOf(deck?deck.theme:'indigo').ink);
+  $("mathSizeInput").value=existing?existing.fontSize:32;
+  mathSymCat=0;buildSymCatTabs();buildSymGrid();
+  updateMathPreview();
+  $("mathModal").classList.add("show");
+}
+function closeMathEditor(){$("mathModal").classList.remove("show");mathEditTargetId=null}
+function commitMathEditor(){
+  const latex=$("mathLatexInput").value.trim();
+  if(!latex)return toast("Enter a LaTeX expression first");
+  const color=$("mathColorInput").value, fontSize=+$("mathSizeInput").value||32;
+  if(mathEditTargetId){
+    const e=deck.slides[current].elements.find(x=>x.id===mathEditTargetId);
+    if(e){snapshot();e.latex=latex;e.color=color;e.fontSize=fontSize;render();scheduleSave()}
+  }else{
+    snapshot();
+    const e=mathEl(latex,26,32,48,26,color,fontSize);
+    deck.slides[current].elements.push(e);selected=e.id;render();scheduleSave();
+  }
+  closeMathEditor();
+}
 
 function defaultSlide(layout,theme){
   const t=themeOf(theme||(deck?deck.theme:'indigo'));
@@ -1071,6 +1224,7 @@ function renderMiniSlide(container,slide,isDark,aspect){
     else if(e.type==="icon"){d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`}
     else if(e.type==="chart"){d.innerHTML=renderChartSVG(e)}
     else if(e.type==="table"){d.innerHTML=renderTableHTML(e,false)}
+    else if(e.type==="math"){d.style.display="flex";d.style.alignItems="center";d.style.justifyContent="center";d.style.overflow="hidden";d.style.color=e.color;d.style.fontSize=(e.fontSize*0.34)+"px";d.innerHTML=katexRenderSafe(e.latex,true)}
     container.appendChild(d);
   });
 }
@@ -1351,6 +1505,7 @@ function renderElement(c,e){
   else if(e.type==="icon"){d=document.createElement("div");d.className="element icon-el"}
   else if(e.type==="chart"){d=document.createElement("div");d.className="element chart-el"}
   else if(e.type==="table"){d=document.createElement("div");d.className="element table-el"}
+  else if(e.type==="math"){d=document.createElement("div");d.className="element math-el"}
   else{d=document.createElement("div");d.className="element shape-el"}
   d.dataset.id=e.id;
   Object.assign(d.style,{left:e.x+"%",top:e.y+"%",width:e.w+"%",height:e.h+"%",opacity:e.opacity??1,transform:`rotate(${e.rotation||0}deg)`});
@@ -1362,6 +1517,7 @@ function renderElement(c,e){
   if(e.type==="shape")styleShapeDiv(d,e);
   if(e.type==="icon")d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`;
   if(e.type==="chart")d.innerHTML=renderChartSVG(e);
+  if(e.type==="math"){d.style.color=e.color;d.style.fontSize=e.fontSize+"px";d.innerHTML=katexRenderSafe(e.latex,true)}
   if(e.type==="table"){
     d.innerHTML=renderTableHTML(e,isEditing);
     if(isEditing){
@@ -1394,6 +1550,7 @@ function renderElement(c,e){
     if(editingId===e.id)return; // already editing this element — let native text/word selection behave normally
     if(e.type==="text"&&!e.locked)enterTextEdit(e.id,ev);
     if(e.type==="table"&&!e.locked)enterTableEdit(e.id,ev);
+    if(e.type==="math"&&!e.locked)openMathEditor(e.id);
   };
   if(!e.locked&&!isEditing)makeDrag(d,e);
   if(selected===e.id&&!isEditing){
@@ -1492,6 +1649,8 @@ function makeDrag(d,e){
       if(wasSelected&&!e.locked&&(e.type==="text"||e.type==="table")){
         if(e.type==="text")enterTextEdit(e.id,up);
         else enterTableEdit(e.id,up);
+      }else if(wasSelected&&!e.locked&&e.type==="math"){
+        openMathEditor(e.id);
       }else{
         if(editingId&&editingId!==e.id)editingId=null;
         selected=e.id;renderCanvas();updateFormatPanel();updateLayersPanel();
@@ -1725,7 +1884,7 @@ const ANIM_DEFS=[["none","None"],["fadeIn","Fade In"],["flyInLeft","Fly In L"],[
 const ANIM_CLASS={fadeIn:'pa-fadeIn',flyInLeft:'pa-flyInLeft',flyInRight:'pa-flyInRight',flyInUp:'pa-flyInUp',flyInDown:'pa-flyInDown',zoomIn:'pa-zoomIn',bounceIn:'pa-bounceIn',spin:'pa-spin',pulse:'pa-pulse'};
 function ensureAnim(e){if(!e.anim)e.anim=defaultAnim();return e.anim}
 function elementLabel(e){
-  return e.type==="text"?(e.text.slice(0,18)||"Text box"):e.type==="image"?"Image":e.type==="icon"?("Icon · "+(ICON_LABELS[e.iconName]||e.iconName)):e.type==="chart"?("Chart · "+e.chartType):e.type==="table"?("Table "+e.rows+"×"+e.cols):("Shape · "+e.shape);
+  return e.type==="text"?(e.text.slice(0,18)||"Text box"):e.type==="image"?"Image":e.type==="icon"?("Icon · "+(ICON_LABELS[e.iconName]||e.iconName)):e.type==="chart"?("Chart · "+e.chartType):e.type==="table"?("Table "+e.rows+"×"+e.cols):e.type==="math"?("Math · "+(e.latex||"").slice(0,16)):("Shape · "+e.shape);
 }
 function buildAnimPanel(){
   if(!$("animGrid"))return;
@@ -1908,6 +2067,12 @@ function updateFormatPanel(){
     <div class="row"><div class="field"><label>Border color</label><input type="color" value="${toHex(e.borderColor)}" oninput="liveSet('borderColor',this.value)"></div><div class="field"><label>Font size</label><input type="number" min="8" max="48" value="${e.fontSize}" oninput="liveSet('fontSize',+this.value)"></div></div>
     <div class="field"><label>Border width</label><input type="number" min="0" max="8" value="${e.borderWidth}" oninput="liveSet('borderWidth',+this.value)"></div>
   </div></details>`;
+  if(e.type==="math")html+=`<details class="acc" open><summary>Math equation</summary><div class="acc-body">
+    <div class="field"><label>LaTeX source</label><textarea style="min-height:64px;font-family:monospace" oninput="liveSetMath(this.value)">${esc(e.latex)}</textarea></div>
+    <div class="mathpreviewbox" style="margin-bottom:8px;color:${e.color};font-size:${Math.min(28,e.fontSize)}px">${katexRenderSafe(e.latex,true)}</div>
+    <div class="row"><div class="field"><label>Color</label><input type="color" value="${toHex(e.color)}" oninput="liveSet('color',this.value)"></div><div class="field"><label>Size (px)</label><input type="number" min="10" max="140" value="${e.fontSize}" oninput="liveSet('fontSize',+this.value)"></div></div>
+    <button class="check" style="width:100%" onclick="openMathEditor(selected)">Open full equation editor</button>
+  </div></details>`;
   const anim=ensureAnim(e);
   const hasAnim=anim.type!=='none';
   html+=`<details class="acc" open><summary>Animation${hasAnim?' <span style="font-weight:400;color:var(--accent-ink)">· '+(ANIM_DEFS.find(a=>a[0]===anim.type)||[,anim.type])[1]+'</span>':''}</summary><div class="acc-body">
@@ -1943,6 +2108,10 @@ function setChartData(text){
   e.data=parseChartDataText(text);
   renderCanvas();renderThumbs();scheduleSave();
 }
+function liveSetMath(text){
+  let e=selectedEl();if(!e||e.type!=="math")return;snapshot();e.latex=text;
+  renderCanvas();renderThumbs();scheduleSave();
+}
 function round(n){return Math.round(n*10)/10}
 function liveSet(k,v){let e=selectedEl();if(!e)return;snapshot();e[k]=v;
   // avoid stealing focus while typing text field
@@ -1960,7 +2129,7 @@ function updateLayersPanel(){
   if(!els.length){box.innerHTML='<div class="empty-panel">No elements on this slide yet. Use Insert to add text, images, shapes, icons, or charts.</div>';return}
   box.innerHTML=`<div class="layer-list">`+els.slice().reverse().map(e=>{
     const label=elementLabel(e);
-    const icon=e.type==="text"?"🗛":e.type==="image"?"🖼":e.type==="icon"?"✦":e.type==="chart"?"📊":e.type==="table"?"⊞":"◆";
+    const icon=e.type==="text"?"🗛":e.type==="image"?"🖼":e.type==="icon"?"✦":e.type==="chart"?"📊":e.type==="table"?"⊞":e.type==="math"?"∑":"◆";
     const hasAnim=e.anim&&e.anim.type!=='none';
     return `<div class="layer-row ${selected===e.id?'active':''}" onclick="selectFromLayer('${e.id}')">
       <span>${icon}</span><span class="lname">${esc(label)}</span>
@@ -1995,18 +2164,69 @@ function openSorter(){
 function closeSorter(){$("sorter").classList.remove("show")}
 
 /* =================== EXPORT =================== */
+let _katexCSSCache=null;
+async function getKatexCSSText(){
+  if(_katexCSSCache!==null)return _katexCSSCache;
+  try{
+    const link=[...document.styleSheets].find(s=>s.href&&s.href.includes("katex"));
+    const res=await fetch(link?link.href:"https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css");
+    _katexCSSCache=await res.text();
+  }catch(err){_katexCSSCache=""}
+  return _katexCSSCache;
+}
+async function mathElementToPNG(e){
+  try{
+    const katexHTML=katexRenderSafe(e.latex,true);
+    const temp=document.createElement("div");
+    temp.style.position="fixed";temp.style.left="-9999px";temp.style.top="0";
+    temp.style.color=e.color||"#12141C";
+    temp.style.fontSize=(e.fontSize||32)+"px";
+    temp.style.display="inline-block";
+    temp.innerHTML=katexHTML;
+    document.body.appendChild(temp);
+    const w=Math.max(10,temp.offsetWidth+8), h=Math.max(10,temp.offsetHeight+8);
+    document.body.removeChild(temp);
+    const cssText=await getKatexCSSText();
+    const scale=3;
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w*scale}" height="${h*scale}" viewBox="0 0 ${w} ${h}">
+      <foreignObject width="100%" height="100%">
+        <div xmlns="http://www.w3.org/1999/xhtml">
+          <style>${cssText}</style>
+          <div style="color:${e.color||'#12141C'};font-size:${e.fontSize||32}px;display:inline-block;padding:4px">${katexHTML}</div>
+        </div>
+      </foreignObject>
+    </svg>`;
+    const svgBlob=new Blob([svg],{type:"image/svg+xml;charset=utf-8"});
+    const url=URL.createObjectURL(svgBlob);
+    const dataUrl=await new Promise((resolve,reject)=>{
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement("canvas");
+        canvas.width=w*scale;canvas.height=h*scale;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,w*scale,h*scale);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror=err=>{URL.revokeObjectURL(url);reject(err)};
+      img.src=url;
+    });
+    return {dataUrl,w,h};
+  }catch(err){console.error("mathElementToPNG failed:",err);return null}
+}
 async function exportPPTX(){
   if(typeof PptxGenJS==="undefined")return toast("PPTX library could not load");
+  toast("Exporting…");
   const pptx=new PptxGenJS();
   const {w:pageW,h:pageH}=currentPageSize();
   pptx.defineLayout({name:"SLATEDECK_CUSTOM",width:pageW,height:pageH});
   pptx.layout="SLATEDECK_CUSTOM";
   pptx.author="SlateDeck";pptx.title=deck.name;
-  deck.slides.forEach(s=>{
+  for(const s of deck.slides){
     let ps=pptx.addSlide();ps.background={color:toHex(s.bg).replace("#","")};
     if(s.notes)ps.addNotes(s.notes);
-    s.elements.forEach(e=>{
-      if(e.hidden)return;
+    for(const e of s.elements){
+      if(e.hidden)continue;
       let x=e.x/100*pageW,y=e.y/100*pageH,w=e.w/100*pageW,h=e.h/100*pageH;
       if(e.type==="text")ps.addText(e.text,{x,y,w,h,fontFace:e.fontFamily,fontSize:e.fontSize*0.72,color:toHex(e.color).replace("#",""),bold:e.bold,italic:e.italic,underline:e.underline?"sng":undefined,align:e.align,margin:.04,fit:"shrink",transparency:Math.round((1-(e.opacity??1))*100),rotate:e.rotation||0,bullet:e.bullet?true:false});
       if(e.type==="image"&&e.src)ps.addImage({data:e.src,x,y,w,h,transparency:Math.round((1-(e.opacity??1))*100),rotate:e.rotation||0});
@@ -2014,6 +2234,19 @@ async function exportPPTX(){
         const svgMarkup=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${toHex(e.color)}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`;
         const dataUri="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(svgMarkup)));
         try{ps.addImage({data:dataUri,x,y,w,h,transparency:Math.round((1-(e.opacity??1))*100),rotate:e.rotation||0})}catch(err){}
+      }
+      if(e.type==="math"){
+        try{
+          const result=await mathElementToPNG(e);
+          if(result){
+            const fitScale=Math.min(w/result.w,h/result.h);
+            const imgW=result.w*fitScale, imgH=result.h*fitScale;
+            const imgX=x+(w-imgW)/2, imgY=y+(h-imgH)/2;
+            ps.addImage({data:result.dataUrl,x:imgX,y:imgY,w:imgW,h:imgH,transparency:Math.round((1-(e.opacity??1))*100),rotate:e.rotation||0});
+          }else{
+            ps.addText(e.latex,{x,y,w,h,fontFace:"Georgia",italic:true,fontSize:(e.fontSize||32)*0.6,color:toHex(e.color).replace("#",""),align:"center",valign:"middle"});
+          }
+        }catch(err){}
       }
       if(e.type==="chart"){
         const data=(e.data||[]).filter(d=>d&&d.label!==undefined);
@@ -2049,8 +2282,8 @@ async function exportPPTX(){
           ps.addTable(rowsData,{x,y,w,h});
         }catch(err){}
       }
-    });
-  });
+    }
+  }
   await pptx.writeFile({fileName:(deck.name||"presentation")+".pptx"});toast("Exported "+(deck.name||"presentation")+".pptx");
 }
 
@@ -2085,6 +2318,7 @@ function presentElement(p,e){
   if(e.type==="icon")d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`;
   if(e.type==="chart")d.innerHTML=renderChartSVG(e);
   if(e.type==="table")d.innerHTML=renderTableHTML(e,false);
+  if(e.type==="math"){Object.assign(d.style,{display:"flex",alignItems:"center",justifyContent:"center",color:e.color,fontSize:e.fontSize+"px"});d.innerHTML=katexRenderSafe(e.latex,true)}
   if(e.anim&&e.anim.type&&e.anim.type!=='none'&&ANIM_CLASS[e.anim.type]){
     d.style.setProperty('--endOp',e.opacity??1);
     d.style.opacity=0;
