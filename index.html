@@ -1163,7 +1163,7 @@ function toggleDeckMenu(id){
   if(existing){const wasFor=existing.dataset.for;existing.remove();if(wasFor===id)return}
   const card=$("thumb-"+id).closest(".deck-card");
   const menu=document.createElement("div");menu.className="deck-menu";menu.dataset.for=id;
-  menu.innerHTML=`<button onclick="duplicateDeckAction('${id}')">Duplicate</button><button onclick="downloadDeck('${id}')">Download .json</button><button class="danger" onclick="deleteDeckAction('${id}')">Delete</button>`;
+  menu.innerHTML=`<button onclick="duplicateDeckAction('${id}')">Duplicate</button><button onclick="downloadDeck('${id}')">Download .json</button><button onclick="driveSaveDeckAction('${id}')">Save to Pro Drive</button><button class="danger" onclick="deleteDeckAction('${id}')">Delete</button>`;
   card.appendChild(menu);
   setTimeout(()=>document.addEventListener('click',function h(e){if(!menu.contains(e.target)){menu.remove();document.removeEventListener('click',h)}}),0);
 }
@@ -2214,15 +2214,16 @@ async function mathElementToPNG(e){
     return {dataUrl,w,h};
   }catch(err){console.error("mathElementToPNG failed:",err);return null}
 }
-async function exportPPTX(){
-  if(typeof PptxGenJS==="undefined")return toast("PPTX library could not load");
-  toast("Exporting…");
+async function buildPptxObject(deckObj){
+  if(typeof PptxGenJS==="undefined")throw new Error("PPTX library could not load");
   const pptx=new PptxGenJS();
-  const {w:pageW,h:pageH}=currentPageSize();
+  const base=sizeOf(deckObj.sizeId);
+  const landscape=deckObj.landscape!==false;
+  const pageW=landscape?base.w:base.h, pageH=landscape?base.h:base.w;
   pptx.defineLayout({name:"SLATEDECK_CUSTOM",width:pageW,height:pageH});
   pptx.layout="SLATEDECK_CUSTOM";
-  pptx.author="SlateDeck";pptx.title=deck.name;
-  for(const s of deck.slides){
+  pptx.author="SlateDeck";pptx.title=deckObj.name;
+  for(const s of deckObj.slides){
     let ps=pptx.addSlide();ps.background={color:toHex(s.bg).replace("#","")};
     if(s.notes)ps.addNotes(s.notes);
     for(const e of s.elements){
@@ -2284,6 +2285,13 @@ async function exportPPTX(){
       }
     }
   }
+  return pptx;
+}
+async function exportPPTX(){
+  toast("Exporting…");
+  let pptx;
+  try{ pptx=await buildPptxObject(deck); }
+  catch(err){ toast(err.message||"Export failed"); return; }
   await pptx.writeFile({fileName:(deck.name||"presentation")+".pptx"});toast("Exported "+(deck.name||"presentation")+".pptx");
 }
 
