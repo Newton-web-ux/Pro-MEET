@@ -100,6 +100,7 @@ button{cursor:pointer}
 .gas-url-bar input{flex:1;max-width:520px;border:1px solid #F3D8A6;border-radius:6px;padding:5px 9px;font-size:11.5px;background:#fff}
 .pro-badge{display:inline-flex;align-items:center;gap:3px;background:linear-gradient(155deg,#F59E0B,#B45309);color:#fff;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.02em}
 .pro-badge.pending{background:var(--muted-2)}
+.limit-upgrade-link{color:var(--accent-ink);font-weight:700;cursor:pointer;text-decoration:underline}
 
 /* ============ UPGRADE TO PRO ============ */
 .upgrade-card{width:380px;max-width:90vw;background:#fff;border-radius:16px;padding:26px;text-align:center;position:relative}
@@ -386,7 +387,7 @@ details.acc[open] summary::after{transform:rotate(180deg)}
     <div class="dash-hero">
       <div>
         <h1>Your presentations</h1>
-        <p>Pick up where you left off, or start something new.</p>
+        <p id="deckLimitInfo">Pick up where you left off, or start something new.</p>
       </div>
     </div>
     <div class="section-label">Start from a template</div>
@@ -848,6 +849,26 @@ function updateProBadge(){
     badge.classList.add("hidden");
   }
 }
+/* ---- Free-tier presentation limit ---- */
+const FREE_DECK_LIMIT = 3;
+function isProUser(){return proStatus.plan==="pro"&&proStatus.status==="active"}
+function canCreateAnotherDeck(){return isProUser()||library.length<FREE_DECK_LIMIT}
+function showDeckLimitReached(){
+  toast(`Free plan is limited to ${FREE_DECK_LIMIT} presentations — upgrade to Pro for unlimited`);
+  openUpgradeModal();
+}
+function updateDeckLimitInfo(){
+  const el=$("deckLimitInfo");if(!el)return;
+  if(isProUser()){
+    el.innerHTML=`Pick up where you left off, or start something new. <span class="pro-badge" style="margin-left:6px">★ PRO</span>`;
+    return;
+  }
+  const used=library.length;
+  el.innerHTML=used>=FREE_DECK_LIMIT
+    ? `${used} of ${FREE_DECK_LIMIT} free presentations used — <span class="limit-upgrade-link" onclick="openUpgradeModal()">upgrade for unlimited</span>`
+    : `${used} of ${FREE_DECK_LIMIT} free presentations used. <span class="limit-upgrade-link" onclick="openUpgradeModal()">Go unlimited with Pro</span>`;
+}
+
 function selectUpgradePlan(type){
   upgradeBilling=type;
   $("upgradeMonthlyBtn").classList.toggle("active",type==="monthly");
@@ -1468,6 +1489,7 @@ function openTemplateGallery(){
 function closeTemplates(){$("templateModal").classList.remove("show")}
 function createDeckFromGallery(layout){closeTemplates();createDeck("Untitled presentation",layout,'indigo')}
 async function createDeck(name,layout,theme){
+  if(!canCreateAnotherDeck()){showDeckLimitReached();return}
   const d=newDeckObj(name,layout,theme);
   try{
     await window.storage.set('deck-'+d.id, JSON.stringify(d), false);
@@ -1499,6 +1521,7 @@ async function openDeck(id){
   requestAnimationFrame(fitCanvasToStage);
 }
 function renderDashboard(){
+  updateDeckLimitInfo();
   const q=($("dashSearch").value||"").toLowerCase().trim();
   const list=library.filter(l=>!q||l.name.toLowerCase().includes(q)).sort((a,b)=>b.updated-a.updated);
   $("deckSectionLabel").textContent=q?`Results for "${q}"`:"All presentations";
@@ -1548,6 +1571,7 @@ async function renameDeck(id,name){
   renderDashboard();
 }
 async function duplicateDeckAction(id){
+  if(!canCreateAnotherDeck()){showDeckLimitReached();return}
   try{
     const r=await window.storage.get('deck-'+id,false);const src=JSON.parse(r.value);
     const d=clone(src);d.id=did();d.name=src.name+" (copy)";d.created=Date.now();d.updated=Date.now();
@@ -1568,7 +1592,9 @@ async function downloadDeck(id){
 }
 function importProject(){
   const i=document.createElement("input");i.type="file";i.accept=".json";
-  i.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  i.onchange=e=>{const f=e.target.files[0];if(!f)return;
+    if(!canCreateAnotherDeck()){showDeckLimitReached();return}
+    const r=new FileReader();
     r.onload=async()=>{try{const d=JSON.parse(r.result);d.id=did();d.updated=Date.now();
       await window.storage.set('deck-'+d.id,JSON.stringify(d),false);library.unshift(indexEntryFrom(d));await saveLibrary();renderDashboard();toast("Presentation imported");
       if(currentUser&&GAS_URL&&cloudReady)cloudSaveDeck(d);
