@@ -802,8 +802,7 @@ const GOOGLE_CLIENT_ID = "384904424093-j1a6kupjerhjufurpvur4hbik6k90bla.apps.goo
    control happens server-side in Code.gs (verifyIdToken), which checks
    each request's Google sign-in token and only lets a person read/write
    their own Drive folder and Sheet row — never anyone else's. */
-const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycby56g1ahtNoLlz4a-So9okdeXAiPz0t8dyQrK7RwuOspTr7GahzqZ-ykyNK4QcCFUNt/exec
-";
+const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycby56g1ahtNoLlz4a-So9okdeXAiPz0t8dyQrK7RwuOspTr7GahzqZ-ykyNK4QcCFUNt/exec";
 /* localStorage override still works (useful for pointing your own dev
    browser at a test deployment) but nobody has to set it manually anymore. */
 let GAS_URL = localStorage.getItem("sd_gas_url") || DEFAULT_GAS_URL;
