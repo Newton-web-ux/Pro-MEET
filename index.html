@@ -10,6 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
   --ink:#12141C; --canvas:#F1F2F6; --paper:#FFFFFF; --paper-2:#F7F8FB; --line:#E3E5EC; --line-2:#EDEEF3;
@@ -79,6 +80,46 @@ button{cursor:pointer}
 .mini-el{position:absolute;overflow:hidden;transform-origin:top left}
 .mini-el img{width:100%;height:100%;object-fit:contain}
 .mini-ph{width:100%;height:100%;background:repeating-linear-gradient(45deg,#EEF0F6,#EEF0F6 6px,#E4E6EF 6px,#E4E6EF 12px);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--muted-2)}
+
+/* ============ AUTH ============ */
+.auth-box{display:flex;align-items:center;gap:8px}
+.auth-signedout{display:flex;align-items:center;gap:8px}
+.auth-signedin{display:none;align-items:center;gap:9px}
+.auth-signedin.show{display:flex}
+.auth-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid var(--line);background:var(--accent-soft)}
+.auth-name{font-size:12.5px;font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.auth-status{font-size:10.5px;color:var(--muted-2)}
+.sync-badge{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.sync-badge.syncing{color:var(--accent-ink)}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:#22C55E;flex:none}
+.sync-dot.off{background:var(--muted-2)}
+.sync-dot.busy{background:var(--accent);animation:syncpulse 1s ease-in-out infinite}
+@keyframes syncpulse{0%,100%{opacity:1}50%{opacity:.3}}
+.gas-url-bar{display:none;align-items:center;gap:8px;padding:8px 26px;background:#FFF7ED;border-bottom:1px solid #FDE7C7;font-size:12px}
+.gas-url-bar.show{display:flex}
+.gas-url-bar input{flex:1;max-width:520px;border:1px solid #F3D8A6;border-radius:6px;padding:5px 9px;font-size:11.5px;background:#fff}
+.pro-badge{display:inline-flex;align-items:center;gap:3px;background:linear-gradient(155deg,#F59E0B,#B45309);color:#fff;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.02em}
+.pro-badge.pending{background:var(--muted-2)}
+
+/* ============ UPGRADE TO PRO ============ */
+.upgrade-card{width:380px;max-width:90vw;background:#fff;border-radius:16px;padding:26px;text-align:center;position:relative}
+.upgrade-card .modal-close{position:absolute;top:14px;right:14px;color:var(--ink)}
+.upgrade-badge{display:inline-block;background:var(--accent);color:#fff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.03em;margin-bottom:6px}
+.upgrade-card h2{margin:4px 0 2px;font-family:var(--font-display)}
+.upgrade-card .sub{margin:0 0 4px}
+.upgrade-toggle{display:flex;border-radius:12px;overflow:hidden;border:1px solid var(--accent);margin:16px 0}
+.upgrade-toggle button{flex:1;padding:10px;border:none;cursor:pointer;font-size:13.5px;font-weight:600;background:#fff;color:var(--accent-ink)}
+.upgrade-toggle button.active{background:var(--accent);color:#fff}
+.upgrade-amount{font-size:28px;font-weight:800;color:var(--accent-ink);margin:6px 0 14px;font-family:var(--font-display)}
+.upgrade-features{text-align:left;font-size:13px;color:var(--ink);margin:0 0 16px;padding-left:20px;line-height:1.9}
+.upgrade-qr{width:200px;height:200px;margin:6px auto;border-radius:10px;border:1px solid var(--line)}
+.upgrade-pay-btn{margin-top:14px;width:100%;padding:12px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:15px;font-weight:700}
+.upgrade-pay-btn:hover{background:var(--accent-ink)}
+.upgrade-pay-btn:disabled{opacity:.55;cursor:default}
+.upgrade-status{margin-top:12px;font-size:13px;min-height:18px}
+.upgrade-status.success{color:#15803D}
+.upgrade-status.error{color:var(--danger)}
+.upgrade-note{font-size:11.5px;color:var(--muted);margin-top:8px}
 
 /* ============ EDITOR SHELL ============ */
 #editorView{height:100vh;display:none;flex-direction:column;overflow:hidden}
@@ -319,9 +360,28 @@ details.acc[open] summary::after{transform:rotate(180deg)}
     <div class="dash-brand"><span class="brand-mark">S</span>Slate<span style="color:var(--accent)">Deck</span></div>
     <div class="dash-search"><input id="dashSearch" placeholder="Search presentations" oninput="renderDashboard()"></div>
     <div class="dash-spacer"></div>
+    <div class="sync-badge" id="syncBadge" title="Cloud sync status"><span class="sync-dot off" id="syncDot"></span><span id="syncLabel">Local only</span></div>
+    <div class="auth-box">
+      <div class="auth-signedout" id="authSignedOut">
+        <div id="gsiButton"></div>
+      </div>
+      <div class="auth-signedin" id="authSignedIn">
+        <img id="authAvatar" class="auth-avatar" src="" alt="">
+        <span id="authName" class="auth-name"></span>
+        <span id="proBadge" class="pro-badge hidden">★ PRO</span>
+        <button class="pill-btn" onclick="signOutGoogle()">Sign out</button>
+      </div>
+    </div>
+    <button class="pill-btn" id="upgradeBtn" onclick="openUpgradeModal()">⭐ Upgrade to Pro</button>
     <button class="pill-btn" onclick="importProject()">Import .json</button>
     <button class="pill-btn primary" onclick="openTemplateGallery()">+ New presentation</button>
   </header>
+  <div class="gas-url-bar" id="gasUrlBar">
+    <span>⚠ Cloud backend not configured — paste your deployed Apps Script Web App URL to enable Google Drive sync:</span>
+    <input id="gasUrlInput" placeholder="https://script.google.com/macros/s/AKfycbz7AoGpjpFRkX-muPUOvu00c9tGKrLE4sMetOCm6c_Ver9IoPDpZ_2KfhBfPim_8AMb/exec
+">
+    <button class="pill-btn primary" onclick="saveGasUrl()">Save</button>
+  </div>
   <div class="dash-body"><div class="dash-inner">
     <div class="dash-hero">
       <div>
@@ -613,6 +673,41 @@ details.acc[open] summary::after{transform:rotate(180deg)}
   </div>
 </div>
 
+<!-- Upgrade to Pro modal -->
+<div id="upgradeModal" class="modal">
+  <div class="upgrade-card">
+    <button class="ed-iconbtn modal-close" onclick="closeUpgradeModal()">✕</button>
+    <div class="upgrade-badge">MOST POPULAR</div>
+    <h2>⭐ Upgrade to Pro</h2>
+    <p class="sub" style="color:var(--muted);font-size:13px">Best for frequent presenters &amp; teams</p>
+
+    <div class="upgrade-toggle">
+      <button type="button" id="upgradeMonthlyBtn" class="active" onclick="selectUpgradePlan('monthly')">Monthly</button>
+      <button type="button" id="upgradeYearlyBtn" onclick="selectUpgradePlan('yearly')">Yearly</button>
+    </div>
+
+    <div class="upgrade-amount" id="upgradePrice">₹199 / month</div>
+
+    <ul class="upgrade-features">
+      <li>Unlimited presentations</li>
+      <li>Unlimited images &amp; charts</li>
+      <li>All shapes, icons &amp; math tools</li>
+      <li>Unlimited .pptx exports</li>
+      <li>Cloud sync to Google Drive</li>
+      <li>Priority support</li>
+    </ul>
+
+    <a id="upgradeUpiLink" target="_blank">
+      <img id="upgradeQrImg" class="upgrade-qr" alt="Scan to pay with GPay/UPI">
+    </a>
+
+    <button class="upgrade-pay-btn" id="upgradePayBtn" onclick="submitUpgradePayment()">I've paid via GPay</button>
+
+    <div class="upgrade-status" id="upgradeStatus"></div>
+    <div class="upgrade-note">Access unlocks after manual verification, usually within a day.</div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <!-- Icon picker modal -->
@@ -697,10 +792,227 @@ details.acc[open] summary::after{transform:rotate(180deg)}
 </div>
 
 <script>
+/* =================== GOOGLE OAUTH + GAS CLOUD STORAGE =================== */
+/* Shared OAuth Client ID across the Pro suite */
+const GOOGLE_CLIENT_ID = "384904424093-j1a6kupjerhjufurpvur4hbik6k90bla.apps.googleusercontent.com";
+/* Paste your deployed Apps Script Web App /exec URL here (or set it once via
+   the orange bar that appears on the dashboard — it's stored in localStorage
+   so you only have to do this once per browser). See the companion Code.gs
+   file for the backend this talks to. */
+let GAS_URL = localStorage.getItem("sd_gas_url") || "";
+
+let currentUser = null;      // {email,name,picture,idToken}
+let cloudReady = false;      // true once we've verified GAS_URL + token work
+let syncBusyCount = 0;
+let proStatus = { plan: "free", status: "active", billing: "" };
+
+/* =================== UPGRADE TO PRO ===================
+   Same GPay/UPI + manual-approval pattern as the rest of the Pro suite,
+   backed by the "SlateDeck Users" Google Sheet the Code.gs writes to. */
+const PAY_UPI_ID = "banerjeearnab.live@oksbi";     // ← replace with your own UPI ID
+const PAY_PAYEE_NAME = "SlateDeck";                 // ← shown in the payer's GPay app
+const UPGRADE_PLANS = {
+  monthly: { price: 199, label: "₹199 / month" },
+  yearly:  { price: 1999, label: "₹1999 / year (2 months free)" },
+};
+let upgradeBilling = "monthly";
+
+/* First-touch attribution: capture ?ref=... once, and remember it even
+   after the query string is gone on later visits. document.referrer covers
+   "came from a link on another site" when no ?ref= is present. */
+function captureReferrer(){
+  const params=new URLSearchParams(location.search);
+  const ref=params.get("ref");
+  if(ref&&!localStorage.getItem("sd_referrer"))localStorage.setItem("sd_referrer",ref);
+  else if(!localStorage.getItem("sd_referrer")&&document.referrer)localStorage.setItem("sd_referrer",document.referrer);
+}
+function getReferrer(){return localStorage.getItem("sd_referrer")||"direct"}
+function getPlatform(){
+  const ua=navigator.userAgent||"";
+  const isMobile=/Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+  let os="other";
+  if(/Windows/i.test(ua))os="Windows";
+  else if(/Mac OS X/i.test(ua)&&!/Mobi/i.test(ua))os="macOS";
+  else if(/Android/i.test(ua))os="Android";
+  else if(/iPhone|iPad|iPod/i.test(ua))os="iOS";
+  else if(/Linux/i.test(ua))os="Linux";
+  return (isMobile?"mobile":"desktop")+"-"+os;
+}
+function updateProBadge(){
+  const badge=$("proBadge");if(!badge)return;
+  if(proStatus.plan==="pro"&&proStatus.status==="active"){
+    badge.textContent="★ PRO";badge.className="pro-badge";badge.classList.remove("hidden");
+  }else if(proStatus.status==="pending"){
+    badge.textContent="PRO PENDING";badge.className="pro-badge pending";badge.classList.remove("hidden");
+  }else{
+    badge.classList.add("hidden");
+  }
+}
+function selectUpgradePlan(type){
+  upgradeBilling=type;
+  $("upgradeMonthlyBtn").classList.toggle("active",type==="monthly");
+  $("upgradeYearlyBtn").classList.toggle("active",type==="yearly");
+  const plan=UPGRADE_PLANS[type];
+  $("upgradePrice").textContent=plan.label;
+  const upi=`upi://pay?pa=${encodeURIComponent(PAY_UPI_ID)}&pn=${encodeURIComponent(PAY_PAYEE_NAME)}&am=${plan.price}&cu=INR`;
+  $("upgradeUpiLink").href=upi;
+  $("upgradeQrImg").src=`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upi)}`;
+}
+function openUpgradeModal(){
+  if(!currentUser){toast("Sign in with Google first to upgrade");return}
+  selectUpgradePlan(upgradeBilling);
+  $("upgradePayBtn").disabled=false;$("upgradePayBtn").textContent="I've paid via GPay";
+  $("upgradeStatus").className="upgrade-status";$("upgradeStatus").textContent="";
+  $("upgradeModal").classList.add("show");
+}
+function closeUpgradeModal(){$("upgradeModal").classList.remove("show")}
+async function submitUpgradePayment(){
+  if(!currentUser)return toast("Sign in with Google first");
+  if(!GAS_URL)return toast("Cloud backend not configured yet — set it up from the dashboard first");
+  const btn=$("upgradePayBtn"),status=$("upgradeStatus");
+  btn.disabled=true;btn.textContent="Payment submitted";
+  status.className="upgrade-status";status.textContent="⏳ Awaiting admin approval…";
+  try{
+    await gasCall("submitPayment",{billing:upgradeBilling,method:"gpay",referrer:getReferrer(),platform:getPlatform()});
+    status.className="upgrade-status success";
+    status.textContent="Payment request submitted ✔️ You'll get Pro access after approval.";
+    proStatus={plan:"pro (pending)",status:"pending",billing:upgradeBilling};
+    updateProBadge();
+  }catch(e){
+    btn.disabled=false;btn.textContent="I've paid via GPay";
+    status.className="upgrade-status error";
+    status.textContent="Submission failed — check your connection and try again.";
+  }
+}
+
+function setSyncStatus(mode){
+  const dot=$("syncDot"), label=$("syncLabel");
+  if(!dot||!label)return;
+  dot.className="sync-dot"+(mode==="busy"?" busy":mode==="off"?" off":"");
+  label.textContent = mode==="busy" ? "Syncing…" : mode==="on" ? "Synced to Drive" : mode==="error" ? "Sync error" : "Local only";
+}
+function beginSync(){syncBusyCount++;setSyncStatus("busy")}
+function endSync(ok){syncBusyCount=Math.max(0,syncBusyCount-1);if(syncBusyCount===0)setSyncStatus(ok?(currentUser?"on":"off"):"error")}
+
+function saveGasUrl(){
+  const v=($("gasUrlInput").value||"").trim();
+  if(!v)return toast("Enter a Web App URL first");
+  GAS_URL=v;localStorage.setItem("sd_gas_url",v);
+  $("gasUrlBar").classList.remove("show");
+  toast("Backend URL saved");
+  if(currentUser)verifyAndSync();
+}
+function maybeShowGasUrlBar(){
+  if(!GAS_URL)$("gasUrlBar").classList.add("show");
+  else $("gasUrlBar").classList.remove("show");
+}
+
+/* ---- Google Identity Services sign-in ---- */
+function initGoogleAuth(){
+  if(typeof google==="undefined"||!google.accounts){setTimeout(initGoogleAuth,300);return}
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: onGoogleCredential,
+    auto_select: false,
+  });
+  google.accounts.id.renderButton($("gsiButton"),{theme:"outline",size:"medium",shape:"pill",text:"signin_with"});
+  // Try silent restore of a previously-saved session
+  const saved=localStorage.getItem("sd_user");
+  if(saved){
+    try{
+      const u=JSON.parse(saved);
+      if(u&&u.idToken&&u.exp&&Date.now()<u.exp){
+        currentUser=u;showSignedInUI(u);verifyAndSync();
+      }else{
+        localStorage.removeItem("sd_user");
+      }
+    }catch(e){localStorage.removeItem("sd_user")}
+  }
+}
+function decodeJwt(token){
+  try{
+    const payload=token.split(".")[1];
+    const json=decodeURIComponent(atob(payload.replace(/-/g,"+").replace(/_/g,"/")).split("").map(c=>"%"+("00"+c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+    return JSON.parse(json);
+  }catch(e){return null}
+}
+function onGoogleCredential(resp){
+  const claims=decodeJwt(resp.credential);
+  if(!claims)return toast("Sign-in failed — could not read credential");
+  currentUser={
+    email:claims.email, name:claims.name||claims.email, picture:claims.picture||"",
+    idToken:resp.credential, exp:(claims.exp||0)*1000
+  };
+  localStorage.setItem("sd_user",JSON.stringify(currentUser));
+  showSignedInUI(currentUser);
+  verifyAndSync();
+}
+function showSignedInUI(u){
+  $("authSignedOut").style.display="none";
+  $("authSignedIn").classList.add("show");
+  $("authAvatar").src=u.picture||"";
+  $("authName").textContent=u.name||u.email;
+  maybeShowGasUrlBar();
+}
+function signOutGoogle(){
+  currentUser=null;cloudReady=false;
+  proStatus={plan:"free",status:"active",billing:""};
+  updateProBadge();
+  localStorage.removeItem("sd_user");
+  $("authSignedOut").style.display="flex";
+  $("authSignedIn").classList.remove("show");
+  $("gasUrlBar").classList.remove("show");
+  setSyncStatus("off");
+  try{google.accounts.id.disableAutoSelect()}catch(e){}
+  toast("Signed out — using local storage only");
+  loadLibrary().then(renderDashboard);
+}
+async function verifyAndSync(){
+  if(!currentUser)return;
+  maybeShowGasUrlBar();
+  if(!GAS_URL){setSyncStatus("off");return}
+  beginSync();
+  try{
+    const r=await gasCall("verify",{});
+    if(r&&r.ok){cloudReady=true;endSync(true);toast("Connected to Google Drive as "+currentUser.email)}
+    else{cloudReady=false;endSync(false);toast("Could not verify with backend — check the Web App URL")}
+  }catch(e){cloudReady=false;endSync(false);toast("Backend unreachable — check the Web App URL and deployment access")}
+  if(cloudReady){
+    // Log/refresh this user's row in the Users sheet, then pick up their
+    // current plan status (in case an admin approved a payment since the
+    // last visit).
+    try{await gasCall("trackUser",{referrer:getReferrer(),platform:getPlatform()})}catch(e){}
+    try{
+      const s=await gasCall("status",{});
+      if(s&&s.ok)proStatus={plan:s.plan,status:s.status,billing:s.billing};
+    }catch(e){}
+  }
+  updateProBadge();
+  await loadLibrary();renderDashboard();
+}
+
+/* ---- Low-level call to the Apps Script Web App ----
+   Matches the Pro suite's established GAS backend pattern: POST as
+   Content-Type: text/plain (avoids CORS preflight against Apps Script),
+   ID token in the body for server-side verification, JSON payload. */
+async function gasCall(action,payload){
+  if(!GAS_URL)throw new Error("no GAS_URL configured");
+  const body=JSON.stringify(Object.assign({action,idToken:currentUser?currentUser.idToken:null},payload||{}));
+  const res=await fetch(GAS_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body});
+  if(!res.ok)throw new Error("HTTP "+res.status);
+  const data=await res.json();
+  if(data&&data.error)throw new Error(data.error);
+  return data;
+}
+
 /* =================== STORAGE SHIM =================== */
 /* window.storage only exists inside Claude artifact previews. When this file
    is opened directly or deployed standalone (e.g. GitHub Pages), fall back
-   to localStorage so persistence still works, using the same async API. */
+   to localStorage so persistence still works, using the same async API.
+   When a Google account is signed in AND a GAS backend URL is configured,
+   deck reads/writes are additionally mirrored to Google Drive via GAS —
+   see cloudGet/cloudSet/cloudDelete/cloudList below, wired up in the
+   Storage section. */
 if(typeof window.storage==="undefined"){
   const NS={u:"sd_user:",s:"sd_shared:"};
   window.storage={
@@ -728,6 +1040,29 @@ if(typeof window.storage==="undefined"){
       return {keys,prefix,shared:!!shared};
     }
   };
+}
+/* Cloud-aware wrappers used specifically for deck + library persistence.
+   Local storage is always the source of truth for instant reads/writes;
+   the cloud call happens alongside (fire-and-forget for reads, awaited
+   for writes) so the UI never blocks on network round-trips. */
+async function cloudGetDeck(id){
+  if(!currentUser||!GAS_URL||!cloudReady)return null;
+  try{const r=await gasCall("get",{deckId:id});return r&&r.deck?r.deck:null}catch(e){return null}
+}
+async function cloudSaveDeck(d){
+  if(!currentUser||!GAS_URL||!cloudReady)return false;
+  beginSync();
+  try{await gasCall("save",{deck:d});endSync(true);return true}catch(e){endSync(false);return false}
+}
+async function cloudDeleteDeck(id){
+  if(!currentUser||!GAS_URL||!cloudReady)return false;
+  beginSync();
+  try{await gasCall("delete",{deckId:id});endSync(true);return true}catch(e){endSync(false);return false}
+}
+async function cloudListDecks(){
+  if(!currentUser||!GAS_URL||!cloudReady)return null;
+  beginSync();
+  try{const r=await gasCall("list",{});endSync(true);return r&&r.decks?r.decks:null}catch(e){endSync(false);return null}
 }
 
 /* =================== STATE =================== */
@@ -1019,6 +1354,18 @@ async function loadLibrary(){
     const r=await window.storage.get('library-index',false);
     library=r?JSON.parse(r.value):[];
   }catch(e){library=[]}
+  // Merge in anything the cloud knows about that local doesn't (or that's newer)
+  if(currentUser&&GAS_URL&&cloudReady){
+    const cloudDecks=await cloudListDecks();
+    if(cloudDecks){
+      cloudDecks.forEach(ce=>{
+        const idx=library.findIndex(l=>l.id===ce.id);
+        if(idx<0)library.push(ce);
+        else if((ce.updated||0)>(library[idx].updated||0))library[idx]=ce;
+      });
+      await saveLibrary();
+    }
+  }
   if(library.length===0){
     await seedStarterDeck();
   }
@@ -1068,6 +1415,13 @@ async function saveDeckNow(){
     $("saveState").textContent="Save failed";
     toast("Could not save — check console for details");
   }
+  // Mirror to Google Drive if signed in & backend configured — awaited so
+  // saveState reflects true end-to-end status, but never blocks local save.
+  if(currentUser&&GAS_URL&&cloudReady){
+    $("saveState").textContent="Syncing to Drive…";
+    const ok=await cloudSaveDeck(deck);
+    $("saveState").textContent=ok?"Saved to Drive":"Saved locally (Drive sync failed)";
+  }
 }
 function scheduleSave(){
   $("saveState").textContent="Saving…";
@@ -1077,12 +1431,15 @@ function scheduleSave(){
 
 /* =================== DASHBOARD =================== */
 async function initApp(){
+  captureReferrer();
   await loadLibrary();
   buildTemplateStrip();
   buildThemeStrip();
   buildTransStrip();
   renderDashboard();
   showDashboard();
+  setSyncStatus(currentUser?"on":"off");
+  initGoogleAuth();
 }
 function showDashboard(){$("editorView").style.display="none";$("dashboardView").style.display="flex";renderDashboard()}
 function showEditor(){$("dashboardView").style.display="none";$("editorView").style.display="flex"}
@@ -1116,6 +1473,7 @@ async function createDeck(name,layout,theme){
     await window.storage.set('deck-'+d.id, JSON.stringify(d), false);
     library.unshift(indexEntryFrom(d));
     await saveLibrary();
+    if(currentUser&&GAS_URL&&cloudReady)cloudSaveDeck(d);
     openDeck(d.id);
   }catch(e){
     console.error("createDeck failed:",e);
@@ -1125,7 +1483,12 @@ async function createDeck(name,layout,theme){
 async function openDeck(id){
   try{
     const r=await window.storage.get('deck-'+id,false);
-    deck=r?JSON.parse(r.value):newDeckObj();
+    deck=r?JSON.parse(r.value):null;
+    if(!deck&&currentUser&&GAS_URL&&cloudReady){
+      deck=await cloudGetDeck(id);
+      if(deck)await window.storage.set('deck-'+id,JSON.stringify(deck),false);
+    }
+    if(!deck)deck=newDeckObj();
   }catch(e){toast("Could not open presentation");return}
   if(!deck.sizeId)deck.sizeId="widescreen";
   if(deck.landscape===undefined)deck.landscape=true;
@@ -1177,6 +1540,7 @@ async function renameDeck(id,name){
     const d=JSON.parse(r.value);
     d.name=name;
     await window.storage.set('deck-'+id,JSON.stringify(d),false);
+    if(currentUser&&GAS_URL&&cloudReady)cloudSaveDeck(d);
   }catch(e){
     console.error("renameDeck failed:",e);
     toast("Could not rename presentation");
@@ -1189,12 +1553,14 @@ async function duplicateDeckAction(id){
     const d=clone(src);d.id=did();d.name=src.name+" (copy)";d.created=Date.now();d.updated=Date.now();
     await window.storage.set('deck-'+d.id,JSON.stringify(d),false);
     library.unshift(indexEntryFrom(d));await saveLibrary();renderDashboard();toast("Presentation duplicated");
+    if(currentUser&&GAS_URL&&cloudReady)cloudSaveDeck(d);
   }catch(e){toast("Could not duplicate")}
 }
 async function deleteDeckAction(id){
   if(!confirm("Delete this presentation? This can't be undone."))return;
   try{await window.storage.delete('deck-'+id,false)}catch(e){}
   library=library.filter(l=>l.id!==id);await saveLibrary();renderDashboard();toast("Presentation deleted");
+  if(currentUser&&GAS_URL&&cloudReady)cloudDeleteDeck(id);
 }
 async function downloadDeck(id){
   const r=await window.storage.get('deck-'+id,false);const d=JSON.parse(r.value);
@@ -1204,7 +1570,8 @@ function importProject(){
   const i=document.createElement("input");i.type="file";i.accept=".json";
   i.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
     r.onload=async()=>{try{const d=JSON.parse(r.result);d.id=did();d.updated=Date.now();
-      await window.storage.set('deck-'+d.id,JSON.stringify(d),false);library.unshift(indexEntryFrom(d));await saveLibrary();renderDashboard();toast("Presentation imported")
+      await window.storage.set('deck-'+d.id,JSON.stringify(d),false);library.unshift(indexEntryFrom(d));await saveLibrary();renderDashboard();toast("Presentation imported");
+      if(currentUser&&GAS_URL&&cloudReady)cloudSaveDeck(d);
     }catch{toast("Invalid presentation file")}};r.readAsText(f)};
   i.click();
 }
