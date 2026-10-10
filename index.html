@@ -962,16 +962,24 @@ function decodeJwt(token){
     return JSON.parse(json);
   }catch(e){return null}
 }
-function onGoogleCredential(resp){
+async function onGoogleCredential(resp){
   const claims=decodeJwt(resp.credential);
   if(!claims)return toast("Sign-in failed — could not read credential");
+  // Flush any pending save into the previous account's scope before switching
+  clearTimeout(saveTimer);
+  if(deck){try{await saveDeckNow()}catch(e){}}
+  deck=null;library=[];cloudReady=false;
+  proStatus={plan:"free",status:"active",billing:""};
+  updateProBadge();
   currentUser={
     email:claims.email, name:claims.name||claims.email, picture:claims.picture||"",
     idToken:resp.credential, exp:(claims.exp||0)*1000
   };
   localStorage.setItem("sd_user",JSON.stringify(currentUser));
   showSignedInUI(currentUser);
-  verifyAndSync();
+  await loadLibrary({seed:false});   // this account's local decks only
+  renderDashboard();
+  verifyAndSync();                    // then merges this account's Drive decks
 }
 function showSignedInUI(u){
   $("authSignedOut").style.display="none";
@@ -980,7 +988,11 @@ function showSignedInUI(u){
   $("authName").textContent=u.name||u.email;
   maybeShowGasUrlBar();
 }
-function signOutGoogle(){
+async function signOutGoogle(){
+  // Save the open deck under the account that owns it, then clear it
+  clearTimeout(saveTimer);
+  if(deck){try{await saveDeckNow()}catch(e){}}
+  deck=null;
   currentUser=null;cloudReady=false;
   proStatus={plan:"free",status:"active",billing:""};
   updateProBadge();
@@ -990,8 +1002,10 @@ function signOutGoogle(){
   $("gasUrlBar").classList.remove("show");
   setSyncStatus("off");
   try{google.accounts.id.disableAutoSelect()}catch(e){}
+  showDashboard();
   toast("Signed out — using local storage only");
-  loadLibrary().then(renderDashboard);
+  await loadLibrary();
+  renderDashboard();
 }
 async function verifyAndSync(){
   if(!currentUser)return;
@@ -1035,30 +1049,39 @@ async function gasCall(action,payload){
 /* window.storage only exists inside Claude artifact previews. When this file
    is opened directly or deployed standalone (e.g. GitHub Pages), fall back
    to localStorage so persistence still works, using the same async API.
+
+   Per-account isolation: every signed-in account reads and writes its own
+   namespace ("sd_acct:<email>:..."), so presentations from E1 never appear
+   when signed in as E2. Signed-out (guest) use keeps the original
+   "sd_user:" prefix, which means any decks created before this change
+   remain available as guest data.
+
    When a Google account is signed in AND a GAS backend URL is configured,
-   deck reads/writes are additionally mirrored to Google Drive via GAS —
-   see cloudGet/cloudSet/cloudDelete/cloudList below, wired up in the
-   Storage section. */
+   deck reads/writes are additionally mirrored to that account's own Google
+   Drive folder via GAS — see cloudGet/cloudSet/cloudDelete/cloudList below. */
 if(typeof window.storage==="undefined"){
-  const NS={u:"sd_user:",s:"sd_shared:"};
+  const SHARED_NS="sd_shared:";
+  const userNS=()=>currentUser&&currentUser.email
+    ? "sd_acct:"+currentUser.email.toLowerCase()+":"
+    : "sd_user:";
   window.storage={
     async get(key,shared){
       try{
-        const raw=localStorage.getItem((shared?NS.s:NS.u)+key);
+        const raw=localStorage.getItem((shared?SHARED_NS:userNS())+key);
         if(raw===null)return null;
         return {key,value:raw,shared:!!shared};
       }catch(e){return null}
     },
     async set(key,value,shared){
-      localStorage.setItem((shared?NS.s:NS.u)+key,value);
+      localStorage.setItem((shared?SHARED_NS:userNS())+key,value);
       return {key,value,shared:!!shared};
     },
     async delete(key,shared){
-      localStorage.removeItem((shared?NS.s:NS.u)+key);
+      localStorage.removeItem((shared?SHARED_NS:userNS())+key);
       return {key,deleted:true,shared:!!shared};
     },
     async list(prefix,shared){
-      const ns=shared?NS.s:NS.u,p=ns+(prefix||""),keys=[];
+      const ns=shared?SHARED_NS:userNS(),p=ns+(prefix||""),keys=[];
       for(let i=0;i<localStorage.length;i++){
         const k=localStorage.key(i);
         if(k.startsWith(p))keys.push(k.slice(ns.length));
@@ -1375,7 +1398,8 @@ function newDeckObj(name,layout,theme,sizeId,landscape){
 }
 
 /* =================== STORAGE =================== */
-async function loadLibrary(){
+async function loadLibrary(opts){
+  opts=opts||{};
   try{
     const r=await window.storage.get('library-index',false);
     library=r?JSON.parse(r.value):[];
@@ -1392,7 +1416,7 @@ async function loadLibrary(){
       await saveLibrary();
     }
   }
-  if(library.length===0){
+  if(library.length===0&&opts.seed!==false){
     await seedStarterDeck();
   }
 }
@@ -1458,7 +1482,14 @@ function scheduleSave(){
 /* =================== DASHBOARD =================== */
 async function initApp(){
   captureReferrer();
-  await loadLibrary();
+  // Restore a saved session BEFORE the first library load so the right
+  // account's presentations are shown from the very start.
+  try{
+    const u=JSON.parse(localStorage.getItem("sd_user")||"null");
+    if(u&&u.idToken&&u.exp&&Date.now()<u.exp)currentUser=u;
+  }catch(e){}
+  // Signed-in accounts are seeded (if empty) only after the cloud check in verifyAndSync
+  await loadLibrary({seed:!currentUser});
   buildTemplateStrip();
   buildThemeStrip();
   buildTransStrip();
