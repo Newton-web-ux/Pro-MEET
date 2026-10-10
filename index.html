@@ -292,6 +292,13 @@ details.acc[open] summary::after{transform:rotate(180deg)}
 .symcat-tabs button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:600;color:var(--muted)}
 .symcat-tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
+/* Draw / ink */
+.ink-el{cursor:move}
+.ink-el svg{width:100%;height:100%;display:block;overflow:visible;pointer-events:none}
+.draw-overlay{position:absolute;inset:0;z-index:30;touch-action:none;cursor:crosshair}
+.draw-live{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.draw-swatches{display:grid;grid-template-columns:repeat(5,26px);gap:6px}
+
 /* Slide sorter overlay */
 .sorter{position:fixed;inset:0;background:#12141cf2;z-index:60;display:none;flex-direction:column}
 .sorter.show{display:flex}
@@ -415,6 +422,7 @@ details.acc[open] summary::after{transform:rotate(180deg)}
     <div class="ribbon-tabs">
       <button class="rtab active" data-tab="home" onclick="switchRibbon('home')">Home</button>
       <button class="rtab" data-tab="insert" onclick="switchRibbon('insert')">Insert</button>
+      <button class="rtab" data-tab="draw" onclick="switchRibbon('draw')">Draw</button>
       <button class="rtab" data-tab="design" onclick="switchRibbon('design')">Design</button>
       <button class="rtab" data-tab="transitions" onclick="switchRibbon('transitions')">Transitions</button>
       <button class="rtab" data-tab="animations" onclick="switchRibbon('animations')">Animations</button>
@@ -544,6 +552,41 @@ details.acc[open] summary::after{transform:rotate(180deg)}
           <button class="rbtn-lg" onclick="openTablePicker()">⊞<span>Table</span></button>
         </div>
         <div class="rgroup-label">Table</div>
+      </div>
+    </div>
+
+    <!-- DRAW -->
+    <div class="ribbon-panel" data-panel="draw">
+      <div class="rgroup">
+        <div class="rgroup-row">
+          <button class="rbtn rbtn-lg" data-draw="select" title="Select and move objects" onclick="setDrawTool(null)">↖<span>Select</span></button>
+          <button class="rbtn rbtn-lg" data-draw="pen" title="Pen" onclick="setDrawTool('pen')">🖊<span>Pen</span></button>
+          <button class="rbtn rbtn-lg" data-draw="pencil" title="Pencil" onclick="setDrawTool('pencil')">✎<span>Pencil</span></button>
+          <button class="rbtn rbtn-lg" data-draw="highlighter" title="Highlighter" onclick="setDrawTool('highlighter')">🖍<span>Highlighter</span></button>
+          <button class="rbtn rbtn-lg" data-draw="eraser" title="Eraser — drag across a stroke to remove it" onclick="setDrawTool('eraser')">⌫<span>Eraser</span></button>
+        </div>
+        <div class="rgroup-label">Tools</div>
+      </div>
+      <div class="rgroup">
+        <div class="rgroup-row">
+          <div class="draw-swatches" id="drawSwatches"></div>
+          <input id="drawColorInput" class="rcolor" type="color" value="#12141C" title="Custom color" oninput="setDrawColor(this.value)">
+        </div>
+        <div class="rgroup-label">Ink color · <span id="drawToolLabel">Pen</span></div>
+      </div>
+      <div class="rgroup">
+        <div class="rgroup-row">
+          <input id="drawWidth" type="range" min="0.5" max="40" step="0.5" value="2.5" style="width:140px" oninput="setDrawWidth(this.value)">
+          <span id="drawWidthLabel" style="font-size:12px;font-weight:700;width:46px;text-align:center">2.5 pt</span>
+        </div>
+        <div class="rgroup-label">Thickness</div>
+      </div>
+      <div class="rgroup" style="border-right:none">
+        <div class="rgroup-row">
+          <button class="rbtn rbtn-lg" id="drawSnapBtn" style="width:78px" title="Convert hand-drawn lines, circles, rectangles and triangles into clean shapes" onclick="toggleDrawSnap()">▭<span>Ink to Shape</span></button>
+          <button class="rbtn rbtn-lg" title="Remove all ink from this slide" onclick="clearInkOnSlide()">🗑<span>Clear Ink</span></button>
+        </div>
+        <div class="rgroup-label">Ink assist</div>
       </div>
     </div>
 
@@ -1189,6 +1232,7 @@ let drag=null, resize=null, presentIndex=0, presenterNotesOn=false;
 let presentGroups=[], presentStep=-1, presentTimers=[];
 let saveTimer=null, activeRibbon='home', activeInsp='format';
 let animNumberMap={};
+let drawTool=null, drawSnap=false, lastInkTool="pen";   // drawTool: null (select) | pen | pencil | highlighter | eraser
 
 /* =================== SLIDE / ELEMENT FACTORIES =================== */
 function defaultAnim(){return {type:"none",trigger:"onClick",duration:0.6,delay:0}}
@@ -1552,7 +1596,7 @@ async function openDeck(id){
   if(deck.landscape===undefined)deck.landscape=true;
   deck.slides.forEach(s=>{if(s.notes===undefined)s.notes="";if(s.transition===undefined)s.transition="fade";
     s.elements.forEach(el=>{if(el.locked===undefined)el.locked=false;if(el.hidden===undefined)el.hidden=false;if(!el.anim)el.anim=defaultAnim();})});
-  current=0;selected=null;undoStack=[];redoStack=[];zoomLevel=1;notesOpen=false;
+  current=0;selected=null;undoStack=[];redoStack=[];zoomLevel=1;notesOpen=false;drawTool=null;
   showEditor();render();
   requestAnimationFrame(fitCanvasToStage);
 }
@@ -1643,6 +1687,7 @@ function renderMiniSlide(container,slide,isDark,aspect){
   if(!container)return;
   container.innerHTML="";container.style.background=slide.bg;container.style.position="relative";
   if(aspect)container.style.aspectRatio=aspect;
+  const miniRatio=ratioFromAspect(aspect);
   (slide.elements||[]).forEach(e=>{
     if(e.hidden)return;
     const d=document.createElement("div");d.className="mini-el";
@@ -1653,6 +1698,7 @@ function renderMiniSlide(container,slide,isDark,aspect){
     else if(e.type==="icon"){d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`}
     else if(e.type==="chart"){d.innerHTML=renderChartSVG(e)}
     else if(e.type==="table"){d.innerHTML=renderTableHTML(e,false)}
+    else if(e.type==="ink"){d.innerHTML=inkSVG(e,miniRatio)}
     else if(e.type==="math"){d.style.display="flex";d.style.alignItems="center";d.style.justifyContent="center";d.style.overflow="hidden";d.style.color=e.color;d.style.fontSize=(e.fontSize*0.34)+"px";d.innerHTML=katexRenderSafe(e.latex,true)}
     container.appendChild(d);
   });
@@ -1891,7 +1937,7 @@ function render(){
   $("notesToggle").classList.toggle("active",notesOpen);
   $("gridToggle").classList.toggle("active",showGrid);
   $("guideToggle").classList.toggle("active",showGuides);
-  buildThemeStrip();buildSizeStrip();buildTransStrip();buildAnimPanel();
+  buildThemeStrip();buildSizeStrip();buildTransStrip();buildAnimPanel();updateDrawPanel();
   fitCanvasToStage();
 }
 function renderThumbs(){
@@ -1914,7 +1960,7 @@ function renderCanvas(){
   if(showGrid)c.style.backgroundImage="linear-gradient(#94a3b833 1px,transparent 1px),linear-gradient(90deg,#94a3b833 1px,transparent 1px)",c.style.backgroundSize="5% 5%";else c.style.backgroundImage="none";
   animNumberMap=computeAnimNumbers(s);
   s.elements.forEach(e=>renderElement(c,e));
-  ["gx","gy"].forEach(id=>{});
+  attachDrawOverlay(c);
 }
 function renderElement(c,e){
   if(e.hidden)return;
@@ -1935,6 +1981,7 @@ function renderElement(c,e){
   else if(e.type==="chart"){d=document.createElement("div");d.className="element chart-el"}
   else if(e.type==="table"){d=document.createElement("div");d.className="element table-el"}
   else if(e.type==="math"){d=document.createElement("div");d.className="element math-el"}
+  else if(e.type==="ink"){d=document.createElement("div");d.className="element ink-el"}
   else{d=document.createElement("div");d.className="element shape-el"}
   d.dataset.id=e.id;
   Object.assign(d.style,{left:e.x+"%",top:e.y+"%",width:e.w+"%",height:e.h+"%",opacity:e.opacity??1,transform:`rotate(${e.rotation||0}deg)`});
@@ -1947,6 +1994,7 @@ function renderElement(c,e){
   if(e.type==="icon")d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`;
   if(e.type==="chart")d.innerHTML=renderChartSVG(e);
   if(e.type==="math"){d.style.color=e.color;d.style.fontSize=e.fontSize+"px";d.innerHTML=katexRenderSafe(e.latex,true)}
+  if(e.type==="ink")d.innerHTML=inkSVG(e,slideRatio());
   if(e.type==="table"){
     d.innerHTML=renderTableHTML(e,isEditing);
     if(isEditing){
@@ -2313,7 +2361,7 @@ const ANIM_DEFS=[["none","None"],["fadeIn","Fade In"],["flyInLeft","Fly In L"],[
 const ANIM_CLASS={fadeIn:'pa-fadeIn',flyInLeft:'pa-flyInLeft',flyInRight:'pa-flyInRight',flyInUp:'pa-flyInUp',flyInDown:'pa-flyInDown',zoomIn:'pa-zoomIn',bounceIn:'pa-bounceIn',spin:'pa-spin',pulse:'pa-pulse'};
 function ensureAnim(e){if(!e.anim)e.anim=defaultAnim();return e.anim}
 function elementLabel(e){
-  return e.type==="text"?(e.text.slice(0,18)||"Text box"):e.type==="image"?"Image":e.type==="icon"?("Icon · "+(ICON_LABELS[e.iconName]||e.iconName)):e.type==="chart"?("Chart · "+e.chartType):e.type==="table"?("Table "+e.rows+"×"+e.cols):e.type==="math"?("Math · "+(e.latex||"").slice(0,16)):("Shape · "+e.shape);
+  return e.type==="text"?(e.text.slice(0,18)||"Text box"):e.type==="image"?"Image":e.type==="icon"?("Icon · "+(ICON_LABELS[e.iconName]||e.iconName)):e.type==="chart"?("Chart · "+e.chartType):e.type==="table"?("Table "+e.rows+"×"+e.cols):e.type==="math"?("Math · "+(e.latex||"").slice(0,16)):e.type==="ink"?("Ink · "+(e.tool||"pen")):("Shape · "+e.shape);
 }
 function buildAnimPanel(){
   if(!$("animGrid"))return;
@@ -2395,6 +2443,8 @@ function computeAnimGroups(slide){
 /* =================== PANELS =================== */
 function switchRibbon(tab){
   activeRibbon=tab;
+  // Leaving the Draw tab returns to normal selection so the canvas is never left "locked" in ink mode
+  if(tab!=="draw"&&drawTool){drawTool=null;if(deck){renderCanvas();updateDrawPanel()}}
   document.querySelectorAll(".rtab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
   document.querySelectorAll(".ribbon-panel").forEach(p=>p.classList.toggle("active",p.dataset.panel===tab));
 }
@@ -2502,6 +2552,9 @@ function updateFormatPanel(){
     <div class="row"><div class="field"><label>Color</label><input type="color" value="${toHex(e.color)}" oninput="liveSet('color',this.value)"></div><div class="field"><label>Size (px)</label><input type="number" min="10" max="140" value="${e.fontSize}" oninput="liveSet('fontSize',+this.value)"></div></div>
     <button class="check" style="width:100%" onclick="openMathEditor(selected)">Open full equation editor</button>
   </div></details>`;
+  if(e.type==="ink")html+=`<details class="acc" open><summary>Ink</summary><div class="acc-body">
+    <div class="row"><div class="field"><label>Color</label><input type="color" value="${toHex(e.color)}" oninput="liveSet('color',this.value)"></div><div class="field"><label>Width (pt)</label><input type="number" min="0.5" max="60" step="0.5" value="${Math.round(unitsToPt(e.sw)*2)/2}" oninput="setInkWidthPt(+this.value)"></div></div>
+  </div></details>`;
   const anim=ensureAnim(e);
   const hasAnim=anim.type!=='none';
   html+=`<details class="acc" open><summary>Animation${hasAnim?' <span style="font-weight:400;color:var(--accent-ink)">· '+(ANIM_DEFS.find(a=>a[0]===anim.type)||[,anim.type])[1]+'</span>':''}</summary><div class="acc-body">
@@ -2558,7 +2611,7 @@ function updateLayersPanel(){
   if(!els.length){box.innerHTML='<div class="empty-panel">No elements on this slide yet. Use Insert to add text, images, shapes, icons, or charts.</div>';return}
   box.innerHTML=`<div class="layer-list">`+els.slice().reverse().map(e=>{
     const label=elementLabel(e);
-    const icon=e.type==="text"?"🗛":e.type==="image"?"🖼":e.type==="icon"?"✦":e.type==="chart"?"📊":e.type==="table"?"⊞":e.type==="math"?"∑":"◆";
+    const icon=e.type==="text"?"🗛":e.type==="image"?"🖼":e.type==="icon"?"✦":e.type==="chart"?"📊":e.type==="table"?"⊞":e.type==="math"?"∑":e.type==="ink"?"✎":"◆";
     const hasAnim=e.anim&&e.anim.type!=='none';
     return `<div class="layer-row ${selected===e.id?'active':''}" onclick="selectFromLayer('${e.id}')">
       <span>${icon}</span><span class="lname">${esc(label)}</span>
@@ -2570,6 +2623,270 @@ function updateLayersPanel(){
 }
 function selectFromLayer(id){selected=id;render()}
 function toggleFlagFor(id,k){const e=deck.slides[current].elements.find(x=>x.id===id);if(!e)return;snapshot();e[k]=!e[k];render();scheduleSave()}
+
+/* =================== DRAW (INK) ===================
+   Each finished stroke becomes a normal slide element (type "ink"), so it can be
+   selected, moved, resized, layered, animated, duplicated, undone and exported
+   like everything else. Points are stored normalised (0–1) inside the element's
+   box; stroke width is stored in "units" (1000 units = slide width), so ink keeps
+   a consistent thickness across thumbnails, the canvas and Present mode. */
+const SVGNS="http://www.w3.org/2000/svg";
+const DRAW_COLORS=["#12141C","#EF4444","#F97316","#FACC15","#22C55E","#0EA5E9","#4F46E5","#A855F7","#EC4899","#FFFFFF"];
+const drawSettings={
+  pen:{color:"#12141C",w:2.5},
+  pencil:{color:"#475569",w:1.5},
+  highlighter:{color:"#FDE047",w:14}
+};
+const INK_OPACITY={pen:1,pencil:0.85,highlighter:0.4};
+
+function slideRatio(){const s=currentPageSize();return s.h/s.w}
+function ratioFromAspect(a){
+  if(!a)return 9/16;
+  const m=String(a).split("/").map(x=>parseFloat(x));
+  return (m.length===2&&m[0]>0&&m[1]>0)?m[1]/m[0]:9/16;
+}
+function ptToUnits(pt){const s=currentPageSize();return pt*1000/(s.w*72)}
+function unitsToPt(u){const s=currentPageSize();return u/1000*s.w*72}
+
+function pathFromPoints(p,smooth){
+  if(!p.length)return "";
+  const f=n=>n.toFixed(2);
+  if(p.length===1)return `M ${f(p[0][0])} ${f(p[0][1])} L ${f(p[0][0]+0.01)} ${f(p[0][1])}`;
+  if(!smooth||p.length<3)return "M "+p.map(q=>f(q[0])+" "+f(q[1])).join(" L ");
+  let d=`M ${f(p[0][0])} ${f(p[0][1])}`;
+  for(let i=1;i<p.length-1;i++){
+    const mx=(p[i][0]+p[i+1][0])/2,my=(p[i][1]+p[i+1][1])/2;
+    d+=` Q ${f(p[i][0])} ${f(p[i][1])} ${f(mx)} ${f(my)}`;
+  }
+  const l=p[p.length-1];
+  return d+` L ${f(l[0])} ${f(l[1])}`;
+}
+function inkSVG(e,ratio,standalone){
+  const Wu=Math.max(1,e.w*10),Hu=Math.max(1,e.h*10*ratio);
+  const pts=(e.pts||[]).map(([nx,ny])=>[nx*Wu,ny*Hu]);
+  const cap=e.tool==="highlighter"?"butt":"round";
+  const attrs=standalone?` xmlns="${SVGNS}" width="${Wu.toFixed(1)}" height="${Hu.toFixed(1)}"`:"";
+  return `<svg${attrs} viewBox="0 0 ${Wu.toFixed(2)} ${Hu.toFixed(2)}" preserveAspectRatio="none" style="width:100%;height:100%;display:block;overflow:visible;pointer-events:none"><path d="${pathFromPoints(pts,e.smooth!==false)}" fill="none" stroke="${e.color}" stroke-width="${e.sw}" stroke-opacity="${e.strokeOpacity??1}" stroke-linecap="${cap}" stroke-linejoin="round"/></svg>`;
+}
+
+/* ---- geometry helpers ---- */
+function dist2(a,b){return Math.hypot(a[0]-b[0],a[1]-b[1])}
+function segDist(px,py,a,b){
+  const dx=b[0]-a[0],dy=b[1]-a[1],l2=dx*dx+dy*dy;
+  if(l2<1e-9)return Math.hypot(px-a[0],py-a[1]);
+  let t=((px-a[0])*dx+(py-a[1])*dy)/l2;t=Math.max(0,Math.min(1,t));
+  return Math.hypot(px-(a[0]+t*dx),py-(a[1]+t*dy));
+}
+function rdp(pts,eps){
+  if(pts.length<3)return pts.slice();
+  let maxD=0,idx=0;
+  const a=pts[0],b=pts[pts.length-1];
+  for(let i=1;i<pts.length-1;i++){
+    const d=segDist(pts[i][0],pts[i][1],a,b);
+    if(d>maxD){maxD=d;idx=i}
+  }
+  if(maxD>eps){
+    const left=rdp(pts.slice(0,idx+1),eps),right=rdp(pts.slice(idx),eps);
+    return left.slice(0,-1).concat(right);
+  }
+  return [a,b];
+}
+/* Ink to Shape: recognises straight lines, ellipses/circles, rectangles/squares,
+   triangles and quadrilaterals. Returns {pts} with a clean outline, or null if the
+   stroke doesn't clearly match a shape (then it is kept as freehand). */
+function snapStroke(p){
+  if(p.length<4)return null;
+  let L=0;for(let i=1;i<p.length;i++)L+=dist2(p[i-1],p[i]);
+  const xs=p.map(q=>q[0]),ys=p.map(q=>q[1]);
+  const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
+  const w=maxx-minx,h=maxy-miny,diag=Math.hypot(w,h);
+  if(diag<25)return null;
+  const a=p[0],b=p[p.length-1],dse=dist2(a,b);
+  // straight line
+  if(dse>0.9*L){
+    let maxPerp=0;p.forEach(q=>{maxPerp=Math.max(maxPerp,segDist(q[0],q[1],a,b))});
+    if(maxPerp<0.07*dse)return {pts:[a,b]};
+  }
+  if(dse>0.2*L)return null;            // open stroke that isn't a line — leave as freehand
+  const cx=(minx+maxx)/2,cy=(miny+maxy)/2,rx=w/2,ry=h/2;
+  if(rx<6||ry<6)return null;
+  // ellipse / circle
+  let es=0;p.forEach(([x,y])=>{es+=Math.abs(Math.hypot((x-cx)/rx,(y-cy)/ry)-1)});es/=p.length;
+  if(es<0.13){
+    let rrx=rx,rry=ry;
+    if(Math.abs(w-h)/Math.max(w,h)<0.14){rrx=rry=(rx+ry)/2}
+    const out=[];for(let i=0;i<=72;i++){const t=i/72*Math.PI*2;out.push([cx+rrx*Math.cos(t),cy+rry*Math.sin(t)])}
+    return {pts:out};
+  }
+  // rectangle / square
+  let rs=0;p.forEach(([x,y])=>{rs+=Math.min(Math.abs(x-minx),Math.abs(x-maxx),Math.abs(y-miny),Math.abs(y-maxy))});
+  rs=rs/p.length/Math.min(w,h);
+  if(rs<0.07){
+    let x0=minx,x1=maxx,y0=miny,y1=maxy;
+    if(Math.abs(w-h)/Math.max(w,h)<0.1){const s=(w+h)/2;x0=cx-s/2;x1=cx+s/2;y0=cy-s/2;y1=cy+s/2}
+    return {pts:[[x0,y0],[x1,y0],[x1,y1],[x0,y1],[x0,y0]]};
+  }
+  // triangle / quadrilateral
+  const simp=rdp(p,0.08*diag);
+  const verts=simp.slice();
+  if(verts.length>2&&dist2(verts[0],verts[verts.length-1])<0.25*diag)verts.pop();
+  if(verts.length===3||verts.length===4)return {pts:verts.concat([verts[0]])};
+  return null;
+}
+function inkHit(el,px,py,ratio){
+  const Wu=el.w*10,Hu=el.h*10*ratio;
+  const ux=(px-el.x)*10,uy=(py-el.y)*10*ratio;
+  const pts=(el.pts||[]).map(([nx,ny])=>[nx*Wu,ny*Hu]);
+  const th=(el.sw||4)/2+6;
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i],b=pts[i+1]||pts[i];
+    if(segDist(ux,uy,a,b)<=th)return true;
+  }
+  return false;
+}
+
+/* ---- drawing surface ---- */
+function attachDrawOverlay(c){
+  if(!drawTool)return;
+  const ratio=slideRatio();
+  const ov=document.createElement("div");ov.className="draw-overlay";
+  ov.style.cursor=drawTool==="eraser"?"cell":"crosshair";
+  const live=document.createElementNS(SVGNS,"svg");
+  live.setAttribute("class","draw-live");
+  live.setAttribute("viewBox",`0 0 1000 ${1000*ratio}`);
+  live.setAttribute("preserveAspectRatio","none");
+  const lp=document.createElementNS(SVGNS,"path");
+  lp.setAttribute("fill","none");lp.setAttribute("stroke-linejoin","round");
+  live.appendChild(lp);ov.appendChild(live);
+  ov.onclick=ev=>ev.stopPropagation();
+  ov.onpointerdown=ev=>{
+    if(ev.button!==undefined&&ev.button!==0)return;
+    ev.preventDefault();ev.stopPropagation();
+    const tool=drawTool,pid=ev.pointerId;
+    const toPct=e2=>{
+      const r=c.getBoundingClientRect();
+      return [Math.max(0,Math.min(100,(e2.clientX-r.left)/r.width*100)),Math.max(0,Math.min(100,(e2.clientY-r.top)/r.height*100))];
+    };
+    const finish=(mv,up)=>{
+      document.removeEventListener("pointermove",mv);
+      document.removeEventListener("pointerup",up);
+      document.removeEventListener("pointercancel",up);
+    };
+    /* eraser: drag across a stroke to delete it */
+    if(tool==="eraser"){
+      let snapped=false,removedAny=false;
+      const hit=e2=>{
+        const [px,py]=toPct(e2);
+        const els=deck.slides[current].elements;
+        const gone=els.filter(el=>el.type==="ink"&&!el.locked&&!el.hidden&&inkHit(el,px,py,ratio));
+        if(!gone.length)return;
+        if(!snapped){snapshot();snapped=true}
+        deck.slides[current].elements=els.filter(el=>!gone.includes(el));
+        gone.forEach(el=>{const n=c.querySelector('[data-id="'+el.id+'"]');if(n)n.remove()});
+        removedAny=true;
+      };
+      const mv=e2=>{if(e2.pointerId===pid)hit(e2)};
+      const up=e2=>{
+        if(e2.pointerId!==pid)return;
+        finish(mv,up);
+        if(removedAny){selected=null;renderCanvas();renderThumbs();updateLayersPanel();updateFormatPanel();buildAnimPanel();scheduleSave()}
+      };
+      hit(ev);
+      document.addEventListener("pointermove",mv);
+      document.addEventListener("pointerup",up);
+      document.addEventListener("pointercancel",up);
+      return;
+    }
+    /* pen / pencil / highlighter */
+    const cfg=drawSettings[tool],swU=ptToUnits(cfg.w);
+    lp.setAttribute("stroke",cfg.color);
+    lp.setAttribute("stroke-width",swU);
+    lp.setAttribute("stroke-opacity",INK_OPACITY[tool]);
+    lp.setAttribute("stroke-linecap",tool==="highlighter"?"butt":"round");
+    const toU=e2=>{const [px,py]=toPct(e2);return [px*10,py*10*ratio]};
+    const pts=[toU(ev)];
+    lp.setAttribute("d",pathFromPoints(pts,true));
+    const mv=e2=>{
+      if(e2.pointerId!==pid)return;
+      const evs=(e2.getCoalescedEvents&&e2.getCoalescedEvents())||[];
+      (evs.length?evs:[e2]).forEach(x=>{
+        const p=toU(x),l=pts[pts.length-1];
+        if(Math.hypot(p[0]-l[0],p[1]-l[1])>=1.2)pts.push(p);
+      });
+      lp.setAttribute("d",pathFromPoints(pts,true));
+    };
+    const up=e2=>{
+      if(e2.pointerId!==pid)return;
+      finish(mv,up);
+      commitInk(tool,pts,cfg,swU,ratio);
+    };
+    document.addEventListener("pointermove",mv);
+    document.addEventListener("pointerup",up);
+    document.addEventListener("pointercancel",up);
+  };
+  c.appendChild(ov);
+}
+function commitInk(tool,pts,cfg,swU,ratio){
+  if(!pts.length)return;
+  if(pts.length<2){
+    if(tool==="highlighter")return;
+    pts=[pts[0],[pts[0][0]+0.01,pts[0][1]]];
+  }
+  let smooth=true;
+  if(drawSnap&&tool!=="highlighter"){
+    const sn=snapStroke(pts);
+    if(sn){pts=sn.pts;smooth=false}
+  }
+  const pad=swU/2+1;
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  const x0=Math.min(...xs)-pad,x1=Math.max(...xs)+pad,y0=Math.min(...ys)-pad,y1=Math.max(...ys)+pad;
+  const bw=x1-x0,bh=y1-y0;
+  const e={id:uid(),type:"ink",tool,color:cfg.color,sw:swU,strokeOpacity:INK_OPACITY[tool],smooth,
+    pts:pts.map(p=>[(p[0]-x0)/bw,(p[1]-y0)/bh]),
+    x:x0/10,y:y0/(10*ratio),w:bw/10,h:bh/(10*ratio),
+    opacity:1,rotation:0,locked:false,hidden:false,anim:defaultAnim()};
+  snapshot();
+  deck.slides[current].elements.push(e);
+  renderCanvas();renderThumbs();updateLayersPanel();buildAnimPanel();scheduleSave();
+}
+
+/* ---- Draw tab controls ---- */
+function setDrawTool(t){
+  drawTool=t||null;
+  if(drawTool&&drawTool!=="eraser")lastInkTool=drawTool;
+  selected=null;editingId=null;
+  render();
+}
+function drawTarget(){return (drawTool&&drawTool!=="eraser")?drawTool:lastInkTool}
+function setDrawColor(c){drawSettings[drawTarget()].color=c;updateDrawPanel()}
+function setDrawWidth(v){drawSettings[drawTarget()].w=Math.max(0.5,Math.min(60,+v||1));updateDrawPanel()}
+function toggleDrawSnap(){drawSnap=!drawSnap;updateDrawPanel();toast(drawSnap?"Ink to Shape on":"Ink to Shape off")}
+function setInkWidthPt(v){
+  const e=selectedEl();if(!e||e.type!=="ink")return;
+  snapshot();e.sw=ptToUnits(Math.max(0.5,v||1));
+  renderCanvas();renderThumbs();scheduleSave();
+}
+function clearInkOnSlide(){
+  const els=deck.slides[current].elements;
+  if(!els.some(e=>e.type==="ink"))return toast("No ink on this slide");
+  snapshot();
+  deck.slides[current].elements=els.filter(e=>e.type!=="ink");
+  selected=null;render();scheduleSave();toast("Ink cleared");
+}
+function updateDrawPanel(){
+  const sw=$("drawSwatches");if(!sw)return;
+  document.querySelectorAll("[data-draw]").forEach(b=>{
+    const k=b.dataset.draw;
+    b.classList.toggle("active",(k==="select"&&!drawTool)||k===drawTool);
+  });
+  const t=drawTarget(),cfg=drawSettings[t];
+  sw.innerHTML=DRAW_COLORS.map(c=>`<button class="swatch-btn ${c.toLowerCase()===String(cfg.color).toLowerCase()?"active":""}" style="background:${c}" title="${c}" onclick="setDrawColor('${c}')"></button>`).join("");
+  $("drawColorInput").value=toHex(cfg.color);
+  $("drawWidth").value=cfg.w;
+  $("drawWidthLabel").textContent=cfg.w+" pt";
+  $("drawToolLabel").textContent=({pen:"Pen",pencil:"Pencil",highlighter:"Highlighter"})[t];
+  $("drawSnapBtn").classList.toggle("active",drawSnap);
+}
 
 /* =================== VIEW CONTROLS =================== */
 function zoom(d){zoomLevel=Math.max(.5,Math.min(2,zoomLevel+d));$("canvas").style.transform=`scale(${zoomLevel})`;$("zoomLabel").textContent=Math.round(zoomLevel*100)+"%"}
@@ -2664,6 +2981,13 @@ async function exportPPTX(){
         const dataUri="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(svgMarkup)));
         try{ps.addImage({data:dataUri,x,y,w,h,transparency:Math.round((1-(e.opacity??1))*100),rotate:e.rotation||0})}catch(err){}
       }
+      if(e.type==="ink"){
+        try{
+          const svgMarkup=inkSVG(e,pageH/pageW,true);
+          const dataUri="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(svgMarkup)));
+          ps.addImage({data:dataUri,x,y,w,h,transparency:Math.round((1-(e.opacity??1))*100),rotate:e.rotation||0});
+        }catch(err){}
+      }
       if(e.type==="math"){
         try{
           const result=await mathElementToPNG(e);
@@ -2747,6 +3071,7 @@ function presentElement(p,e){
   if(e.type==="icon")d.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="${e.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[e.iconName]||""}</svg>`;
   if(e.type==="chart")d.innerHTML=renderChartSVG(e);
   if(e.type==="table")d.innerHTML=renderTableHTML(e,false);
+  if(e.type==="ink")d.innerHTML=inkSVG(e,slideRatio());
   if(e.type==="math"){Object.assign(d.style,{display:"flex",alignItems:"center",justifyContent:"center",color:e.color,fontSize:e.fontSize+"px"});d.innerHTML=katexRenderSafe(e.latex,true)}
   if(e.anim&&e.anim.type&&e.anim.type!=='none'&&ANIM_CLASS[e.anim.type]){
     d.style.setProperty('--endOp',e.opacity??1);
@@ -2802,7 +3127,7 @@ document.addEventListener("keydown",e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==="c"&&!typing){copySelected()}
   if((e.ctrlKey||e.metaKey)&&e.key==="v"&&!typing){pasteClipboard()}
   if(e.key==="Delete"&&selected&&!typing)deleteSelected();
-  if(e.key==="Escape"){selected=null;render()}
+  if(e.key==="Escape"){selected=null;drawTool=null;render()}
 });
 $("canvas").onclick=()=>{selected=null;renderCanvas();updateFormatPanel();updateLayersPanel()};
 
